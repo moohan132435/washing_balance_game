@@ -204,12 +204,12 @@ function GamePage() {
     patchedCount,
   ]);
 
-  const triggerRandomEvent = useCallback(() => {
-    const keys = Object.keys(eventMap);
-    const randomKey = keys[Math.floor(Math.random() * keys.length)];
-    setEventType(randomKey);
-    setCurrentEvent(eventMap[randomKey].label);
-  }, [eventMap]);
+  // const triggerRandomEvent = useCallback(() => {
+  //   const keys = Object.keys(eventMap);
+  //   const randomKey = keys[Math.floor(Math.random() * keys.length)];
+  //   setEventType(randomKey);
+  //   setCurrentEvent(eventMap[randomKey].label);
+  // }, [eventMap]);
 
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -437,40 +437,40 @@ function GamePage() {
     return () => clearInterval(animation);
   }, [drawCanvas]);
 
-  useEffect(() => {
-    if (scenario.hasMakeup && cleanRate >= REVEAL_THRESHOLD) {
-      setAcneStates((prev) =>
-        prev.map((spot) => ({
-          ...spot,
-          revealed: true,
-        }))
-      );
+  // useEffect(() => {
+  //   if (scenario.hasMakeup && cleanRate >= REVEAL_THRESHOLD) {
+  //     setAcneStates((prev) =>
+  //       prev.map((spot) => ({
+  //         ...spot,
+  //         revealed: true,
+  //       }))
+  //     );
 
-      if (scenario.initialAcneSpots.length > 0 || scenario.lateAcneSpots.length > 0) {
-        setStatusMessage("세정이 진행되며 숨은 트러블이 보이기 시작했어요.");
-      } else {
-        setStatusMessage("메이크업은 지워졌지만 숨은 여드름은 없었어요.");
-      }
-    }
-  }, [cleanRate, scenario]);
+  //     if (scenario.initialAcneSpots.length > 0 || scenario.lateAcneSpots.length > 0) {
+  //       setStatusMessage("세정이 진행되며 숨은 트러블이 보이기 시작했어요.");
+  //     } else {
+  //       setStatusMessage("메이크업은 지워졌지만 숨은 여드름은 없었어요.");
+  //     }
+  //   }
+  // }, [cleanRate, scenario]);
 
-  const applyScrubEffect = useCallback(() => {
-    let cleanDelta = scenario.hasMakeup ? 1.5 : 1.0;
-    let irritationDelta = 1.0;
-    let moistureDelta = -0.8;
+  // const applyScrubEffect = useCallback(() => {
+  //   let cleanDelta = scenario.hasMakeup ? 1.5 : 1.0;
+  //   let irritationDelta = 1.0;
+  //   let moistureDelta = -0.8;
 
-    if (scenario.skinType === "dry") moistureDelta -= 0.4;
-    if (scenario.skinType === "sensitive") irritationDelta += 0.5;
-    if (scenario.skinType === "oily") cleanDelta += 0.2;
+  //   if (scenario.skinType === "dry") moistureDelta -= 0.4;
+  //   if (scenario.skinType === "sensitive") irritationDelta += 0.5;
+  //   if (scenario.skinType === "oily") cleanDelta += 0.2;
 
-    if (eventType === "DRYNESS") moistureDelta -= 0.6;
-    if (eventType === "OIL_REBOUND") cleanDelta -= 0.5;
-    if (eventType === "SENSITIVE") irritationDelta += 0.8;
+  //   if (eventType === "DRYNESS") moistureDelta -= 0.6;
+  //   if (eventType === "OIL_REBOUND") cleanDelta -= 0.5;
+  //   if (eventType === "SENSITIVE") irritationDelta += 0.8;
 
-    setCleanRate((prev) => clamp(prev + cleanDelta, 0, 100));
-    setIrritation((prev) => clamp(prev + irritationDelta, 0, 100));
-    setMoisture((prev) => clamp(prev + moistureDelta, 0, 100));
-  }, [eventType, scenario]);
+  //   setCleanRate((prev) => clamp(prev + cleanDelta, 0, 100));
+  //   setIrritation((prev) => clamp(prev + irritationDelta, 0, 100));
+  //   setMoisture((prev) => clamp(prev + moistureDelta, 0, 100));
+  // }, [eventType, scenario]);
 
   const addBubble = useCallback((x, y) => {
     bubblePointsRef.current.push({
@@ -480,6 +480,52 @@ function GamePage() {
       alpha: 0.52,
     });
   }, []);
+
+  const applyScrubEffect = useCallback(() => {
+  let cleanDelta = scenario.hasMakeup ? 1.5 : 1.0;
+  let irritationDelta = 1.0;
+  let moistureDelta = -0.8;
+
+  if (scenario.skinType === "dry") moistureDelta -= 0.4;
+  if (scenario.skinType === "sensitive") irritationDelta += 0.5;
+  if (scenario.skinType === "oily") cleanDelta += 0.2;
+
+  if (eventType === "DRYNESS") moistureDelta -= 0.6;
+  if (eventType === "OIL_REBOUND") cleanDelta -= 0.5;
+  if (eventType === "SENSITIVE") irritationDelta += 0.8;
+
+  setCleanRate((prevCleanRate) => {
+    const nextCleanRate = clamp(prevCleanRate + cleanDelta, 0, 100);
+
+    const crossedRevealThreshold =
+      scenario.hasMakeup &&
+      prevCleanRate < REVEAL_THRESHOLD &&
+      nextCleanRate >= REVEAL_THRESHOLD;
+
+    if (crossedRevealThreshold) {
+      setAcneStates((prev) =>
+        prev.map((spot) => ({
+          ...spot,
+          revealed: true,
+        }))
+      );
+
+      if (
+        scenario.initialAcneSpots.length > 0 ||
+        scenario.lateAcneSpots.length > 0
+      ) {
+        setStatusMessage("세정이 진행되며 숨은 트러블이 보이기 시작했어요.");
+      } else {
+        setStatusMessage("메이크업은 지워졌지만 숨은 여드름은 없었어요.");
+      }
+    }
+
+    return nextCleanRate;
+  });
+
+  setIrritation((prev) => clamp(prev + irritationDelta, 0, 100));
+  setMoisture((prev) => clamp(prev + moistureDelta, 0, 100));
+}, [eventType, scenario]);
 
   const handleScrubStart = () => {
     if (selectedTool) return;
@@ -623,13 +669,70 @@ function GamePage() {
   };
 
   // 타이머는 항상 흐름
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
-    }, 1000);
+  // useEffect(() => {
+  //   const timer = setInterval(() => {
+  //     setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
+  //   }, 1000);
 
-    return () => clearInterval(timer);
-  }, []);
+  //   return () => clearInterval(timer);
+  // }, []);
+      useEffect(() => {
+      const timer = setInterval(() => {
+        setTimeLeft((prevTime) => {
+          const nextTime = prevTime <= 1 ? 0 : prevTime - 1;
+
+          // 10초 / 5초 랜덤 이벤트
+          if (prevTime === 11 && !hasTriggeredTenSec) {
+            const keys = Object.keys(eventMap);
+            const randomKey = keys[Math.floor(Math.random() * keys.length)];
+            setEventType(randomKey);
+            setCurrentEvent(eventMap[randomKey].label);
+            setHasTriggeredTenSec(true);
+          }
+
+          if (prevTime === 6 && !hasTriggeredFiveSec) {
+            const keys = Object.keys(eventMap);
+            const randomKey = keys[Math.floor(Math.random() * keys.length)];
+            setEventType(randomKey);
+            setCurrentEvent(eventMap[randomKey].label);
+            setHasTriggeredFiveSec(true);
+          }
+
+          // 중간 여드름 등장
+          if (
+            prevTime <= 12 &&
+            prevTime >= 3 &&
+            pendingLateSpots.length > 0 &&
+            Math.random() < 0.18
+          ) {
+            const nextSpot = pendingLateSpots[0];
+
+            setAcneStates((prev) => [
+              ...prev,
+              {
+                ...nextSpot,
+                revealed: !nextSpot.hiddenUnderMakeup || cleanRate >= REVEAL_THRESHOLD,
+                treated: false,
+                patched: false,
+              },
+            ]);
+
+            setPendingLateSpots((prev) => prev.slice(1));
+            setStatusMessage(`${nextSpot.name} 쪽에 새로운 트러블이 올라왔어요.`);
+          }
+
+          return nextTime;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }, [
+      hasTriggeredTenSec,
+      hasTriggeredFiveSec,
+      pendingLateSpots,
+      cleanRate,
+      eventMap,
+    ]);
 
   // 회복
   useEffect(() => {
@@ -661,41 +764,41 @@ function GamePage() {
   }, [cleanRate, irritation, moisture]);
 
   // 랜덤 이벤트
-  useEffect(() => {
-    if (timeLeft === 10 && !hasTriggeredTenSec) {
-      triggerRandomEvent();
-      setHasTriggeredTenSec(true);
-    }
-    if (timeLeft === 5 && !hasTriggeredFiveSec) {
-      triggerRandomEvent();
-      setHasTriggeredFiveSec(true);
-    }
-  }, [timeLeft, hasTriggeredTenSec, hasTriggeredFiveSec, triggerRandomEvent]);
+  // useEffect(() => {
+  //   if (timeLeft === 10 && !hasTriggeredTenSec) {
+  //     triggerRandomEvent();
+  //     setHasTriggeredTenSec(true);
+  //   }
+  //   if (timeLeft === 5 && !hasTriggeredFiveSec) {
+  //     triggerRandomEvent();
+  //     setHasTriggeredFiveSec(true);
+  //   }
+  // }, [timeLeft, hasTriggeredTenSec, hasTriggeredFiveSec, triggerRandomEvent]);
 
   // 중간 여드름 등장
-  useEffect(() => {
-    if (
-      timeLeft <= 12 &&
-      timeLeft >= 3 &&
-      pendingLateSpots.length > 0 &&
-      Math.random() < 0.18
-    ) {
-      const nextSpot = pendingLateSpots[0];
+  // useEffect(() => {
+  //   if (
+  //     timeLeft <= 12 &&
+  //     timeLeft >= 3 &&
+  //     pendingLateSpots.length > 0 &&
+  //     Math.random() < 0.18
+  //   ) {
+  //     const nextSpot = pendingLateSpots[0];
 
-      setAcneStates((prev) => [
-        ...prev,
-        {
-          ...nextSpot,
-          revealed: !nextSpot.hiddenUnderMakeup || cleanRate >= REVEAL_THRESHOLD,
-          treated: false,
-          patched: false,
-        },
-      ]);
+  //     setAcneStates((prev) => [
+  //       ...prev,
+  //       {
+  //         ...nextSpot,
+  //         revealed: !nextSpot.hiddenUnderMakeup || cleanRate >= REVEAL_THRESHOLD,
+  //         treated: false,
+  //         patched: false,
+  //       },
+  //     ]);
 
-      setPendingLateSpots((prev) => prev.slice(1));
-      setStatusMessage(`${nextSpot.name} 쪽에 새로운 트러블이 올라왔어요.`);
-    }
-  }, [timeLeft, pendingLateSpots, cleanRate]);
+  //     setPendingLateSpots((prev) => prev.slice(1));
+  //     setStatusMessage(`${nextSpot.name} 쪽에 새로운 트러블이 올라왔어요.`);
+  //   }
+  // }, [timeLeft, pendingLateSpots, cleanRate]);
 
   // 종료
   useEffect(() => {
