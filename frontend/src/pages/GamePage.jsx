@@ -525,10 +525,22 @@ function GamePage() {
     const y = clientY - rect.top;
 
     const visibleSpots = acneStates.filter((spot) => spot.revealed);
+    // if (visibleSpots.length === 0) {
+    //   setStatusMessage("아직 드러난 여드름이 없어요. 먼저 세정으로 상태를 확인해보세요.");
+    //   setToolLogs((prev) => [...prev, `${selectedTool}_wasted`]);
+    //   setIrritation((prev) => clamp(prev + 1, 0, 100));
+    //   return;
+    // }
     if (visibleSpots.length === 0) {
-      setStatusMessage("아직 드러난 여드름이 없어요. 먼저 세정으로 상태를 확인해보세요.");
+      const wrongToolName = selectedTool === "ointment" ? "연고" : "패치";
+
+      setStatusMessage(`아직 보이는 여드름이 없는데 ${wrongToolName}를 먼저 썼어요. 순서가 꼬였습니다.`);
       setToolLogs((prev) => [...prev, `${selectedTool}_wasted`]);
-      setIrritation((prev) => clamp(prev + 1, 0, 100));
+
+      setIrritation((prev) => clamp(prev + 2, 0, 100));
+      setMoisture((prev) => clamp(prev - 1, 0, 100));
+
+      setSelectedTool(null);
       return;
     }
 
@@ -710,14 +722,21 @@ function GamePage() {
     const patchWithoutOintmentCount = toolLogs.filter(
       (log) => log === "patch_without_ointment"
     ).length;
+    // const wastedCount = toolLogs.filter(
+    //   (log) => log.includes("wasted") || log.includes("miss")
+    // ).length;
     const wastedCount = toolLogs.filter(
-      (log) => log.includes("wasted") || log.includes("miss")
+      (log) =>
+        log.includes("wasted") ||
+        log.includes("miss") ||
+        log.includes("wrong_target")
     ).length;
 
     careOrderScore += Math.min(10, ointmentCount * 5);
     careOrderScore += Math.min(10, patchAfterOintmentCount * 5);
     careOrderScore -= patchWithoutOintmentCount * 4;
-    careOrderScore -= wastedCount * 2;
+    // careOrderScore -= wastedCount * 2;
+    careOrderScore -= wastedCount * 3;
     careOrderScore = clamp(careOrderScore, 0, 20);
 
     let protectionScore = 0;
