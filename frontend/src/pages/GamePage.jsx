@@ -549,8 +549,15 @@ function GamePage() {
     //   return;
     // }
     if (!nearest || nearestDistance > 35) {
-      setStatusMessage("여드름 위치를 더 정확히 눌러주세요.");
-      setToolLogs((prev) => [...prev, `${selectedTool}_miss`]);
+      const wrongToolName = selectedTool === "ointment" ? "연고" : "패치";
+
+      setStatusMessage(`${wrongToolName}를 여드름이 아닌 곳에 사용했어요. 오히려 자극만 올라갑니다.`);
+      setToolLogs((prev) => [...prev, `${selectedTool}_wrong_target`]);
+
+      setIrritation((prev) => clamp(prev + 3, 0, 100));
+      setMoisture((prev) => clamp(prev - 1, 0, 100));
+
+      setSelectedTool(null);
       return;
     }
 
