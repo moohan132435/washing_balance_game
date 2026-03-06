@@ -1,13 +1,15 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-// const API_BASE_URL = "http://localhost:5000";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  const [saveStatus, setSaveStatus] = useState("idle");
+  const [saveMessage, setSaveMessage] = useState("");
   const [saved, setSaved] = useState(false);
 
   const result = location.state || {
@@ -36,32 +38,80 @@ function ResultPage() {
     },
   };
 
+  const payload = useMemo(
+    () => ({
+      nickname: result.nickname,
+      score: result.score,
+      grade: result.grade,
+      cleanRate: Math.round(result.cleanRate || 0),
+      irritation: Math.round(result.irritation || 0),
+      moisture: Math.round(result.moisture || 0),
+      balanceTime: Number(result.balanceTime || 0),
+      scenarioSummary: result.scenarioSummary || "",
+    }),
+    [result]
+  );
+
+  useEffect(() => {
+    console.log("[ResultPage] VITE_API_BASE_URL =", API_BASE_URL);
+    console.log("[ResultPage] location.state =", location.state);
+    console.log("[ResultPage] payload =", payload);
+  }, [location.state, payload]);
+
   useEffect(() => {
     const saveScore = async () => {
       if (saved) return;
 
+      if (!API_BASE_URL) {
+        console.error("[ResultPage] VITE_API_BASE_URL is missing");
+        setSaveStatus("error");
+        setSaveMessage("API 주소가 설정되지 않았습니다. Vercel 환경변수를 확인해주세요.");
+        return;
+      }
+
       try {
-        await axios.post(`${API_BASE_URL}/api/scores`, {
-          nickname: result.nickname,
-          score: result.score,
-          grade: result.grade,
-          cleanRate: Math.round(result.cleanRate),
-          irritation: Math.round(result.irritation),
-          moisture: Math.round(result.moisture),
-          balanceTime: Number(result.balanceTime?.toFixed?.(1) || 0),
-          scenarioSummary: result.scenarioSummary,
-        });
+        setSaveStatus("saving");
+        setSaveMessage("랭킹 저장 중...");
+
+        const url = `${API_BASE_URL}/api/scores`;
+
+        console.log("[ResultPage] saving score to:", url);
+        console.log("[ResultPage] request payload:", payload);
+
+        const response = await axios.post(url, payload);
+
+        console.log("[ResultPage] save success:", response.data);
+
         setSaved(true);
+        setSaveStatus("success");
+        setSaveMessage("랭킹 저장 완료");
       } catch (error) {
-        console.error("점수 저장 실패:", error);
+        console.error("[ResultPage] 점수 저장 실패:", error);
+        console.error("[ResultPage] error.response?.status:", error?.response?.status);
+        console.error("[ResultPage] error.response?.data:", error?.response?.data);
+
+        setSaveStatus("error");
+        setSaveMessage(
+          `랭킹 저장 실패: ${
+            error?.response?.data?.message ||
+            error?.message ||
+            "알 수 없는 오류"
+          }`
+        );
       }
     };
 
     saveScore();
-  }, [result, saved]);
+  }, [API_BASE_URL, payload, saved]);
 
   const handleWadizClick = () => {
     window.open("https://www.wadiz.kr", "_blank");
+  };
+
+  const handleRetrySave = async () => {
+    setSaved(false);
+    setSaveStatus("idle");
+    setSaveMessage("");
   };
 
   return (
@@ -76,33 +126,73 @@ function ResultPage() {
 
         <div style={styles.infoBox}>
           <p style={styles.nickname}>닉네임: {result.nickname}</p>
-          <p style={styles.grade}>{result.grade}</p>
+          <p style={styles.grade}>등급: {result.grade}</p>
           <p style={styles.message}>{result.resultMessage}</p>
           <p style={styles.scenario}>{result.scenarioSummary}</p>
         </div>
 
+        <div style={styles.statusBox}>
+          <div style={styles.statusTitle}>랭킹 저장 상태</div>
+          <div
+            style={{
+              ...styles.statusMessage,
+              ...(saveStatus === "success"
+                ? styles.statusSuccess
+                : saveStatus === "error"
+                ? styles.statusError
+                : saveStatus === "saving"
+                ? styles.statusSaving
+                : {}),
+            }}
+          >
+            {saveMessage || "저장 대기중"}
+          </div>
+          <div style={styles.apiInfo}>API: {API_BASE_URL || "(비어 있음)"}</div>
+        </div>
+
         <div style={styles.statGrid}>
-          <StatCard label="세정 진행도" value={Math.round(result.cleanRate)} />
-          <StatCard label="자극" value={Math.round(result.irritation)} />
-          <StatCard label="수분" value={Math.round(result.moisture)} />
-          <StatCard label="균형 유지" value={`${Number(result.balanceTime || 0).toFixed(1)}초`} />
+          <StatCard label="세정 진행도" value={Math.round(result.cleanRate || 0)} />
+          <StatCard label="자극" value={Math.round(result.irritation || 0)} />
+          <StatCard label="수분" value={Math.round(result.moisture || 0)} />
+          <StatCard
+            label="균형 유지"
+            value={`${Number(result.balanceTime || 0).toFixed(1)}초`}
+          />
         </div>
 
         <div style={styles.breakdownBox}>
           <h3 style={styles.sectionTitle}>점수 구성</h3>
-          <div style={styles.breakdownItem}>세정 점수: {result.scoreBreakdown?.cleaningScore ?? 0}</div>
-          <div style={styles.breakdownItem}>자극 관리 점수: {result.scoreBreakdown?.irritationScore ?? 0}</div>
-          <div style={styles.breakdownItem}>문제 발견 점수: {result.scoreBreakdown?.discoveryScore ?? 0}</div>
-          <div style={styles.breakdownItem}>케어 순서 점수: {result.scoreBreakdown?.careOrderScore ?? 0}</div>
-          <div style={styles.breakdownItem}>보호 마무리 점수: {result.scoreBreakdown?.protectionScore ?? 0}</div>
+          <div style={styles.breakdownItem}>
+            세정 점수: {result.scoreBreakdown?.cleaningScore ?? 0}
+          </div>
+          <div style={styles.breakdownItem}>
+            자극 관리 점수: {result.scoreBreakdown?.irritationScore ?? 0}
+          </div>
+          <div style={styles.breakdownItem}>
+            문제 발견 점수: {result.scoreBreakdown?.discoveryScore ?? 0}
+          </div>
+          <div style={styles.breakdownItem}>
+            케어 순서 점수: {result.scoreBreakdown?.careOrderScore ?? 0}
+          </div>
+          <div style={styles.breakdownItem}>
+            보호 마무리 점수: {result.scoreBreakdown?.protectionScore ?? 0}
+          </div>
         </div>
 
         <div style={styles.breakdownBox}>
           <h3 style={styles.sectionTitle}>처리 결과</h3>
-          <div style={styles.breakdownItem}>총 여드름 수: {result.careStats?.totalAcne ?? 0}</div>
-          <div style={styles.breakdownItem}>발견한 여드름 수: {result.careStats?.revealedCount ?? 0}</div>
-          <div style={styles.breakdownItem}>연고 처리 수: {result.careStats?.treatedCount ?? 0}</div>
-          <div style={styles.breakdownItem}>패치 부착 수: {result.careStats?.patchedCount ?? 0}</div>
+          <div style={styles.breakdownItem}>
+            총 여드름 수: {result.careStats?.totalAcne ?? 0}
+          </div>
+          <div style={styles.breakdownItem}>
+            발견한 여드름 수: {result.careStats?.revealedCount ?? 0}
+          </div>
+          <div style={styles.breakdownItem}>
+            연고 처리 수: {result.careStats?.treatedCount ?? 0}
+          </div>
+          <div style={styles.breakdownItem}>
+            패치 부착 수: {result.careStats?.patchedCount ?? 0}
+          </div>
         </div>
 
         <div style={styles.buttonGroup}>
@@ -118,6 +208,11 @@ function ResultPage() {
           <button style={styles.secondaryButton} onClick={() => navigate("/")}>
             처음으로
           </button>
+          {saveStatus === "error" && (
+            <button style={styles.secondaryButton} onClick={handleRetrySave}>
+              저장 재시도
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -203,6 +298,39 @@ const styles = {
     fontSize: "14px",
     color: "#64748b",
     marginTop: "12px",
+  },
+  statusBox: {
+    background: "#f8fafc",
+    border: "1px solid #e5e7eb",
+    borderRadius: "18px",
+    padding: "16px",
+    marginBottom: "20px",
+    textAlign: "left",
+  },
+  statusTitle: {
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: "8px",
+  },
+  statusMessage: {
+    fontSize: "15px",
+    color: "#475569",
+    lineHeight: "1.5",
+  },
+  statusSuccess: {
+    color: "#047857",
+  },
+  statusError: {
+    color: "#b91c1c",
+  },
+  statusSaving: {
+    color: "#9a6700",
+  },
+  apiInfo: {
+    marginTop: "8px",
+    fontSize: "13px",
+    color: "#64748b",
+    wordBreak: "break-all",
   },
   statGrid: {
     display: "grid",
