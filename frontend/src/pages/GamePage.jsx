@@ -204,6 +204,8 @@ function GamePage() {
     patchedCount,
   ]);
 
+  /** test */
+
   // const triggerRandomEvent = useCallback(() => {
   //   const keys = Object.keys(eventMap);
   //   const randomKey = keys[Math.floor(Math.random() * keys.length)];
