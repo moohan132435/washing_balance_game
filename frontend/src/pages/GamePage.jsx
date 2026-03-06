@@ -1,0 +1,1023 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+const CANVAS_SIZE = 360;
+const REVEAL_THRESHOLD = 55;
+const POSSIBLE_SPOTS = [
+  { id: "forehead", x: 180, y: 122, name: "이마" },
+  { id: "leftCheek", x: 128, y: 188, name: "왼쪽 볼" },
+  { id: "rightCheek", x: 232, y: 188, name: "오른쪽 볼" },
+  { id: "chin", x: 180, y: 252, name: "턱" },
+  { id: "noseSide", x: 165, y: 176, name: "코 옆" },
+];
+
+function shuffle(array) {
+  return [...array].sort(() => Math.random() - 0.5);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function generateScenario() {
+  const gender = Math.random() < 0.5 ? "male" : "female";
+  const skinTypes = ["dry", "oily", "sensitive", "normal"];
+  const skinType = skinTypes[Math.floor(Math.random() * skinTypes.length)];
+
+  const hasMakeup =
+    gender === "female" ? Math.random() < 0.75 : Math.random() < 0.2;
+
+  const acneCountRoll = Math.random();
+  let acneCount = 0;
+  if (acneCountRoll < 0.2) acneCount = 0;
+  else if (acneCountRoll < 0.55) acneCount = 1;
+  else if (acneCountRoll < 0.85) acneCount = 2;
+  else acneCount = 3;
+
+  const chosenSpots = shuffle(POSSIBLE_SPOTS).slice(0, acneCount);
+
+  return {
+    gender,
+    skinType,
+    hasMakeup,
+    acneSpots: chosenSpots.map((spot) => ({
+      ...spot,
+      hiddenUnderMakeup: hasMakeup,
+    })),
+  };
+}
+
+function getGrade(score) {
+  if (score >= 90) return "피부 응급처치 마스터";
+  if (score >= 75) return "밸런스 케어 고수";
+  if (score >= 60) return "과몰입 클렌저형";
+  if (score >= 40) return "순서 꼬임 케어형";
+  return "과세정 위험군";
+}
+
+function getResultMessage(grade) {
+  if (grade === "피부 응급처치 마스터") {
+    return "상태 확인부터 보호 마무리까지, 가장 이상적인 순서로 케어했습니다.";
+  }
+  if (grade === "밸런스 케어 고수") {
+    return "세정과 스팟 케어의 균형을 꽤 잘 맞췄습니다.";
+  }
+  if (grade === "과몰입 클렌저형") {
+    return "세정은 열심히 했지만, 자극 관리나 케어 순서가 조금 아쉬웠습니다.";
+  }
+  if (grade === "순서 꼬임 케어형") {
+    return "무엇을 할지는 맞았지만, 순서와 타이밍이 흔들렸습니다.";
+  }
+  return "너무 서두르거나 과하게 반응했습니다. 먼저 균형부터 잡아야 합니다.";
+}
+
+function getCtaText(grade) {
+  if (grade === "피부 응급처치 마스터") return "이 케어 밸런스를 유지하는 방법 보기";
+  if (grade === "밸런스 케어 고수") return "트러블 케어 루틴 더 보기";
+  if (grade === "과몰입 클렌저형") return "과하지 않은 세정 루틴 보기";
+  if (grade === "순서 꼬임 케어형") return "순서부터 다시 잡는 방법 보기";
+  return "보호까지 생각한 케어 방식 보기";
+}
+
+function GamePage() {
+  const navigate = useNavigate();
+  const canvasRef = useRef(null);
+  const bubblePointsRef = useRef([]);
+
+  const nickname = localStorage.getItem("nickname") || "PLAYER";
+
+  const scenario = useMemo(() => generateScenario(), []);
+
+  const initialAcneState = useMemo(
+    () =>
+      scenario.acneSpots.map((spot) => ({
+        ...spot,
+        revealed: !spot.hiddenUnderMakeup,
+        treated: false,
+        patched: false,
+      })),
+    [scenario]
+  );
+
+  const [timeLeft, setTimeLeft] = useState(15);
+  const [cleanRate, setCleanRate] = useState(0);
+  const [irritation, setIrritation] = useState(
+    scenario.skinType === "sensitive" ? 18 : 10
+  );
+  const [moisture, setMoisture] = useState(
+    scenario.skinType === "dry" ? 86 : 100
+  );
+  const [balanceTime, setBalanceTime] = useState(0);
+  const [currentEvent, setCurrentEvent] = useState("");
+  const [eventType, setEventType] = useState("");
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [selectedTool, setSelectedTool] = useState(null);
+  const [hasTriggeredTenSec, setHasTriggeredTenSec] = useState(false);
+  const [hasTriggeredFiveSec, setHasTriggeredFiveSec] = useState(false);
+  const [acneStates, setAcneStates] = useState(initialAcneState);
+  const [toolLogs, setToolLogs] = useState([]);
+  const [statusMessage, setStatusMessage] = useState("얼굴 상태를 확인해보세요.");
+
+  const eventMap = useMemo(
+    () => ({
+      DRYNESS: {
+        label: "건조 경고! 수분 감소량 증가",
+      },
+      OIL_REBOUND: {
+        label: "피지 반등! 세정 효율 저하",
+      },
+      SENSITIVE: {
+        label: "자극 민감 상태! 자극 상승 주의",
+      },
+    }),
+    []
+  );
+
+  const visibleAcneCount = acneStates.filter((spot) => spot.revealed).length;
+  const treatedCount = acneStates.filter((spot) => spot.treated).length;
+  const patchedCount = acneStates.filter((spot) => spot.patched).length;
+
+  const triggerRandomEvent = useCallback(() => {
+    const keys = Object.keys(eventMap);
+    const randomKey = keys[Math.floor(Math.random() * keys.length)];
+    setEventType(randomKey);
+    setCurrentEvent(eventMap[randomKey].label);
+  }, [eventMap]);
+
+  const drawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.fillStyle = "#fbfdff";
+    ctx.fillRect(0, 0, width, height);
+
+    const faceColor =
+      scenario.gender === "female" ? "#f7d9cc" : "#efcfbf";
+    const hairColor =
+      scenario.gender === "female" ? "#4b3a35" : "#3f322d";
+
+    // 목
+    ctx.fillStyle = faceColor;
+    ctx.fillRect(150, 290, 60, 40);
+
+    // 얼굴
+    ctx.beginPath();
+    ctx.ellipse(width / 2, 180, 108, 138, 0, 0, Math.PI * 2);
+    ctx.fillStyle = faceColor;
+    ctx.fill();
+
+    // 얼굴 입체감
+    ctx.fillStyle = "rgba(0,0,0,0.04)";
+    ctx.beginPath();
+    ctx.ellipse(180, 210, 40, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 머리카락 - 수정된 정상 버전
+    ctx.fillStyle = hairColor;
+
+    if (scenario.gender === "female") {
+      // 윗머리
+      ctx.beginPath();
+      ctx.arc(width / 2, 110, 120, Math.PI, 0);
+      ctx.fill();
+
+      // 양옆 긴 머리
+      ctx.fillRect(70, 110, 35, 120);
+      ctx.fillRect(255, 110, 35, 120);
+    } else {
+      // 남성 윗머리
+      ctx.beginPath();
+      ctx.arc(width / 2, 115, 115, Math.PI, 0);
+      ctx.fill();
+
+      // 옆머리
+      ctx.fillRect(80, 110, 25, 50);
+      ctx.fillRect(255, 110, 25, 50);
+    }
+
+    // 눈썹
+    ctx.strokeStyle = "#4b3a35";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(120, 150);
+    ctx.lineTo(152, 145);
+    ctx.moveTo(208, 145);
+    ctx.lineTo(240, 150);
+    ctx.stroke();
+
+    // 눈
+    ctx.fillStyle = "#2f2f2f";
+    ctx.beginPath();
+    ctx.arc(142, 170, 7, 0, Math.PI * 2);
+    ctx.arc(218, 170, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 코
+    ctx.beginPath();
+    ctx.moveTo(180, 180);
+    ctx.lineTo(171, 207);
+    ctx.lineTo(188, 207);
+    ctx.closePath();
+    ctx.fillStyle = "#eab8a5";
+    ctx.fill();
+
+    // 입
+    ctx.beginPath();
+    ctx.arc(180, 238, 22, 0, Math.PI, false);
+    ctx.strokeStyle = scenario.gender === "female" ? "#b45369" : "#8a4b4b";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 피부 붉은기
+    const rednessAlpha = Math.min(0.45, irritation / 220);
+    if (rednessAlpha > 0.04) {
+      ctx.globalAlpha = rednessAlpha;
+      ctx.fillStyle = "#ff7676";
+      ctx.beginPath();
+      ctx.arc(122, 205, 26, 0, Math.PI * 2);
+      ctx.arc(238, 205, 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 메이크업 레이어
+    if (scenario.hasMakeup && cleanRate < 100) {
+      const makeupAlpha = Math.max(0, (100 - cleanRate) / 100) * 0.65;
+
+      if (makeupAlpha > 0.02) {
+        ctx.globalAlpha = makeupAlpha;
+
+        ctx.fillStyle = "#f1c8c1";
+        ctx.beginPath();
+        ctx.ellipse(180, 180, 100, 128, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (scenario.gender === "female") {
+          ctx.fillStyle = "#f59ab0";
+          ctx.beginPath();
+          ctx.arc(125, 205, 20, 0, Math.PI * 2);
+          ctx.arc(235, 205, 20, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#d94666";
+          ctx.beginPath();
+          ctx.ellipse(180, 236, 24, 10, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#d8b4fe";
+          ctx.beginPath();
+          ctx.ellipse(142, 165, 18, 8, 0, 0, Math.PI * 2);
+          ctx.ellipse(218, 165, 18, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // 여드름 / 패치
+    acneStates.forEach((spot) => {
+      if (!spot.revealed) return;
+
+      if (spot.patched) {
+        ctx.fillStyle = "#f7d7a8";
+        ctx.strokeStyle = "#c9a66b";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(spot.x - 13, spot.y - 10, 26, 20, 6);
+        ctx.fill();
+        ctx.stroke();
+        return;
+      }
+
+      if (spot.treated) {
+        ctx.fillStyle = "#ffc9cf";
+        ctx.beginPath();
+        ctx.arc(spot.x, spot.y, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#e8798f";
+        ctx.beginPath();
+        ctx.arc(spot.x, spot.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+
+      ctx.fillStyle = "#ff9595";
+      ctx.beginPath();
+      ctx.arc(spot.x, spot.y, 11, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#dc2626";
+      ctx.beginPath();
+      ctx.arc(spot.x, spot.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 버블
+    bubblePointsRef.current.forEach((bubble) => {
+      ctx.globalAlpha = bubble.alpha;
+      ctx.beginPath();
+      ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#dbeafe";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    ctx.globalAlpha = 1;
+  }, [scenario, cleanRate, irritation, acneStates]);
+
+  useEffect(() => {
+    drawCanvas();
+  }, [drawCanvas]);
+
+  useEffect(() => {
+    const animation = setInterval(() => {
+      bubblePointsRef.current = bubblePointsRef.current
+        .map((bubble) => ({
+          ...bubble,
+          alpha: bubble.alpha - 0.03,
+          radius: bubble.radius + 0.08,
+        }))
+        .filter((bubble) => bubble.alpha > 0);
+
+      drawCanvas();
+    }, 60);
+
+    return () => clearInterval(animation);
+  }, [drawCanvas]);
+
+  useEffect(() => {
+    if (scenario.hasMakeup && cleanRate >= REVEAL_THRESHOLD) {
+      setAcneStates((prev) =>
+        prev.map((spot) => ({
+          ...spot,
+          revealed: true,
+        }))
+      );
+
+      if (scenario.acneSpots.length > 0) {
+        setStatusMessage("메이크업 아래 숨은 여드름이 드러났어요.");
+      } else {
+        setStatusMessage("메이크업은 지워졌지만 숨은 여드름은 없었어요.");
+      }
+    }
+  }, [cleanRate, scenario]);
+
+  const applyScrubEffect = useCallback(() => {
+    let cleanDelta = scenario.hasMakeup ? 1.5 : 1.0;
+    let irritationDelta = 1.0;
+    let moistureDelta = -0.8;
+
+    if (scenario.skinType === "dry") moistureDelta -= 0.4;
+    if (scenario.skinType === "sensitive") irritationDelta += 0.5;
+    if (scenario.skinType === "oily") cleanDelta += 0.2;
+
+    if (eventType === "DRYNESS") {
+      moistureDelta -= 0.6;
+    }
+    if (eventType === "OIL_REBOUND") {
+      cleanDelta -= 0.5;
+    }
+    if (eventType === "SENSITIVE") {
+      irritationDelta += 0.8;
+    }
+
+    setCleanRate((prev) => clamp(prev + cleanDelta, 0, 100));
+    setIrritation((prev) => clamp(prev + irritationDelta, 0, 100));
+    setMoisture((prev) => clamp(prev + moistureDelta, 0, 100));
+  }, [eventType, scenario]);
+
+  const addBubble = useCallback((x, y) => {
+    bubblePointsRef.current.push({
+      x,
+      y,
+      radius: Math.random() * 9 + 10,
+      alpha: 0.52,
+    });
+  }, []);
+
+  const handleScrubStart = () => {
+    if (selectedTool) return;
+    setIsScrubbing(true);
+  };
+
+  const handleScrubEnd = () => {
+    setIsScrubbing(false);
+  };
+
+  const handlePointerMove = (clientX, clientY) => {
+    if (!isScrubbing || selectedTool) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    addBubble(x, y);
+    applyScrubEffect();
+    drawCanvas();
+  };
+
+  const handleMouseMove = (e) => {
+    handlePointerMove(e.clientX, e.clientY);
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length > 0) {
+      const touch = e.touches[0];
+      handlePointerMove(touch.clientX, touch.clientY);
+    }
+  };
+
+  const applyToolAtPoint = (clientX, clientY) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !selectedTool) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    const visibleSpots = acneStates.filter((spot) => spot.revealed);
+    if (visibleSpots.length === 0) {
+      setStatusMessage("아직 드러난 여드름이 없어요. 먼저 세정으로 상태를 확인해보세요.");
+      setToolLogs((prev) => [...prev, `${selectedTool}_wasted`]);
+      setIrritation((prev) => clamp(prev + 1, 0, 100));
+      return;
+    }
+
+    let nearest = null;
+    let nearestDistance = Infinity;
+
+    visibleSpots.forEach((spot) => {
+      const distance = Math.sqrt((spot.x - x) ** 2 + (spot.y - y) ** 2);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = spot;
+      }
+    });
+
+    if (!nearest || nearestDistance > 35) {
+      setStatusMessage("여드름 위치를 정확히 눌러주세요.");
+      setToolLogs((prev) => [...prev, `${selectedTool}_miss`]);
+      return;
+    }
+
+    if (selectedTool === "ointment") {
+      setAcneStates((prev) =>
+        prev.map((spot) =>
+          spot.id === nearest.id
+            ? {
+                ...spot,
+                treated: true,
+              }
+            : spot
+        )
+      );
+      setStatusMessage(`${nearest.name} 여드름에 연고를 발랐어요.`);
+      setToolLogs((prev) => [...prev, "ointment"]);
+      setSelectedTool(null);
+      return;
+    }
+
+    if (selectedTool === "patch") {
+      const target = acneStates.find((spot) => spot.id === nearest.id);
+      const patchedWithoutOintment = target && !target.treated;
+
+      setAcneStates((prev) =>
+        prev.map((spot) =>
+          spot.id === nearest.id
+            ? {
+                ...spot,
+                patched: true,
+              }
+            : spot
+        )
+      );
+
+      if (patchedWithoutOintment) {
+        setStatusMessage(`${nearest.name}에 패치를 붙였지만, 연고 없이 바로 붙였어요.`);
+        setToolLogs((prev) => [...prev, "patch_without_ointment"]);
+      } else {
+        setStatusMessage(`${nearest.name}에 패치를 붙여 보호했어요.`);
+        setToolLogs((prev) => [...prev, "patch_after_ointment"]);
+      }
+
+      setSelectedTool(null);
+    }
+  };
+
+  const handleFaceClick = (e) => {
+    if (!selectedTool) return;
+    applyToolAtPoint(e.clientX, e.clientY);
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) return 0;
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isScrubbing) {
+        setIrritation((prev) => clamp(prev - 0.45, 0, 100));
+        setMoisture((prev) => clamp(prev + 0.22, 0, 100));
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isScrubbing]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const isBalanced =
+        cleanRate >= 45 &&
+        cleanRate <= 82 &&
+        irritation <= 45 &&
+        moisture >= 32;
+
+      if (isBalanced) {
+        setBalanceTime((prev) => prev + 0.1);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [cleanRate, irritation, moisture]);
+
+  useEffect(() => {
+    if (timeLeft === 10 && !hasTriggeredTenSec) {
+      triggerRandomEvent();
+      setHasTriggeredTenSec(true);
+    }
+    if (timeLeft === 5 && !hasTriggeredFiveSec) {
+      triggerRandomEvent();
+      setHasTriggeredFiveSec(true);
+    }
+  }, [timeLeft, hasTriggeredTenSec, hasTriggeredFiveSec, triggerRandomEvent]);
+
+  useEffect(() => {
+    if (timeLeft > 0) return;
+
+    const targetClean = scenario.hasMakeup ? 80 : 55;
+    const cleaningScore = Math.max(
+      0,
+      30 - Math.abs(cleanRate - targetClean) * 0.7
+    );
+
+    const irritationScore = Math.max(0, 20 - irritation * 0.18);
+
+    const totalAcne = acneStates.length;
+    const revealedCount = acneStates.filter((spot) => spot.revealed).length;
+    const discoveryScore =
+      totalAcne === 0
+        ? 15
+        : Math.round((revealedCount / totalAcne) * 15);
+
+    let careOrderScore = 0;
+    const ointmentCount = toolLogs.filter((log) => log === "ointment").length;
+    const patchAfterOintmentCount = toolLogs.filter(
+      (log) => log === "patch_after_ointment"
+    ).length;
+    const patchWithoutOintmentCount = toolLogs.filter(
+      (log) => log === "patch_without_ointment"
+    ).length;
+    const wastedCount = toolLogs.filter(
+      (log) => log.includes("wasted") || log.includes("miss")
+    ).length;
+
+    careOrderScore += Math.min(10, ointmentCount * 5);
+    careOrderScore += Math.min(10, patchAfterOintmentCount * 5);
+    careOrderScore -= patchWithoutOintmentCount * 4;
+    careOrderScore -= wastedCount * 2;
+    careOrderScore = clamp(careOrderScore, 0, 20);
+
+    let protectionScore = 0;
+    if (totalAcne === 0) {
+      protectionScore = patchWithoutOintmentCount > 0 ? 4 : 15;
+    } else {
+      const protectedCount = acneStates.filter((spot) => spot.patched).length;
+      protectionScore = clamp((protectedCount / totalAcne) * 15, 0, 15);
+    }
+
+    const totalScore = Math.round(
+      cleaningScore +
+        irritationScore +
+        discoveryScore +
+        careOrderScore +
+        protectionScore
+    );
+
+    const grade = getGrade(totalScore);
+    const resultMessage = getResultMessage(grade);
+    const ctaText = getCtaText(grade);
+
+    const scenarioSummary = [
+      scenario.gender === "female" ? "여성 얼굴" : "남성 얼굴",
+      scenario.hasMakeup ? "메이크업 상태" : "맨얼굴 상태",
+      scenario.skinType === "dry"
+        ? "건조 피부"
+        : scenario.skinType === "oily"
+        ? "유분 피부"
+        : scenario.skinType === "sensitive"
+        ? "민감 피부"
+        : "보통 피부",
+      totalAcne > 0 ? `여드름 ${totalAcne}개` : "여드름 없음",
+    ].join(" / ");
+
+    navigate("/result", {
+      state: {
+        nickname,
+        score: totalScore,
+        grade,
+        cleanRate,
+        irritation,
+        moisture,
+        balanceTime,
+        resultMessage,
+        ctaText,
+        scenarioSummary,
+        scoreBreakdown: {
+          cleaningScore: Math.round(cleaningScore),
+          irritationScore: Math.round(irritationScore),
+          discoveryScore: Math.round(discoveryScore),
+          careOrderScore: Math.round(careOrderScore),
+          protectionScore: Math.round(protectionScore),
+        },
+        careStats: {
+          totalAcne,
+          revealedCount,
+          treatedCount,
+          patchedCount,
+        },
+      },
+    });
+  }, [
+    timeLeft,
+    scenario,
+    cleanRate,
+    irritation,
+    moisture,
+    balanceTime,
+    acneStates,
+    toolLogs,
+    navigate,
+    nickname,
+    treatedCount,
+    patchedCount,
+  ]);
+
+  const toolDescription =
+    selectedTool === "ointment"
+      ? "연고 모드: 보이는 여드름을 눌러주세요."
+      : selectedTool === "patch"
+      ? "패치 모드: 보이는 여드름을 눌러주세요."
+      : "기본 모드: 얼굴을 문질러 상태를 확인하세요.";
+
+  return (
+    <div style={styles.wrapper}>
+      <div style={styles.topBar}>
+        <div style={styles.topCard}>
+          <div style={styles.topLabel}>플레이어</div>
+          <div style={styles.topValue}>{nickname}</div>
+        </div>
+        <div style={styles.topCard}>
+          <div style={styles.topLabel}>남은 시간</div>
+          <div style={styles.topValue}>{timeLeft}초</div>
+        </div>
+      </div>
+
+      <h1 style={styles.title}>15초 피부 케어 게임</h1>
+
+      <div style={styles.mainArea}>
+        <div style={styles.leftPanel}>
+          <div
+            style={styles.faceArea}
+            onMouseDown={handleScrubStart}
+            onMouseUp={handleScrubEnd}
+            onMouseLeave={handleScrubEnd}
+            onMouseMove={handleMouseMove}
+            onClick={handleFaceClick}
+            onTouchStart={handleScrubStart}
+            onTouchEnd={handleScrubEnd}
+            onTouchCancel={handleScrubEnd}
+            onTouchMove={handleTouchMove}
+          >
+            <canvas
+              ref={canvasRef}
+              width={CANVAS_SIZE}
+              height={CANVAS_SIZE}
+              style={styles.canvas}
+            />
+            <div style={styles.faceGuideText}>
+              {selectedTool ? toolDescription : "마우스로 문질러 세정해보세요"}
+            </div>
+          </div>
+
+          <div style={styles.toolBar}>
+            <button
+              style={{
+                ...styles.toolButton,
+                ...(selectedTool === "ointment" ? styles.toolButtonActive : {}),
+              }}
+              onClick={() =>
+                setSelectedTool((prev) => (prev === "ointment" ? null : "ointment"))
+              }
+            >
+              연고
+            </button>
+            <button
+              style={{
+                ...styles.toolButton,
+                ...(selectedTool === "patch" ? styles.toolButtonActive : {}),
+              }}
+              onClick={() =>
+                setSelectedTool((prev) => (prev === "patch" ? null : "patch"))
+              }
+            >
+              패치
+            </button>
+            <button
+              style={styles.toolButtonSecondary}
+              onClick={() => setSelectedTool(null)}
+            >
+              손으로 세정
+            </button>
+          </div>
+
+          <div style={styles.playGuideBox}>
+            <p style={styles.playGuideTitle}>현재 상황</p>
+            <p style={styles.playGuideText}>{statusMessage}</p>
+            <p style={styles.playGuideText}>{toolDescription}</p>
+            <p style={styles.playGuideText}>
+              시나리오:{" "}
+              {scenario.gender === "female" ? "여성" : "남성"} /{" "}
+              {scenario.hasMakeup ? "메이크업" : "맨얼굴"} /{" "}
+              {scenario.skinType === "dry"
+                ? "건조"
+                : scenario.skinType === "oily"
+                ? "유분"
+                : scenario.skinType === "sensitive"
+                ? "민감"
+                : "보통"}
+            </p>
+          </div>
+        </div>
+
+        <div style={styles.sidePanel}>
+          <GaugeCard label="세정 진행도" value={cleanRate} color="#60a5fa" />
+          <GaugeCard label="자극 게이지" value={irritation} color="#f87171" />
+          <GaugeCard label="수분 게이지" value={moisture} color="#34d399" />
+
+          <div style={styles.eventBox}>
+            <div style={styles.eventTitle}>랜덤 이벤트</div>
+            <div style={styles.eventContent}>{currentEvent || "이벤트 대기중..."}</div>
+          </div>
+
+          <div style={styles.scoreHintBox}>
+            <div style={styles.scoreHintTitle}>실시간 상태</div>
+            <div style={styles.scoreHintText}>균형 유지 시간: {balanceTime.toFixed(1)}초</div>
+            <div style={styles.scoreHintText}>보이는 여드름 수: {visibleAcneCount}</div>
+            <div style={styles.scoreHintText}>연고 처리: {treatedCount}</div>
+            <div style={styles.scoreHintText}>패치 부착: {patchedCount}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GaugeCard({ label, value, color }) {
+  return (
+    <div style={styles.gaugeCard}>
+      <div style={styles.gaugeLabel}>{label}</div>
+      <div style={styles.gaugeBg}>
+        <div
+          style={{
+            ...styles.gaugeFill,
+            width: `${Math.max(0, Math.min(100, value))}%`,
+            background: color,
+          }}
+        />
+      </div>
+      <div style={styles.gaugeValue}>{Math.round(value)}</div>
+    </div>
+  );
+}
+
+const styles = {
+  wrapper: {
+    minHeight: "100vh",
+    background: "linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%)",
+    padding: "20px",
+    boxSizing: "border-box",
+  },
+  topBar: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "16px",
+    flexWrap: "wrap",
+    marginBottom: "16px",
+  },
+  topCard: {
+    minWidth: "160px",
+    background: "#ffffff",
+    borderRadius: "16px",
+    padding: "14px 18px",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+    textAlign: "center",
+  },
+  topLabel: {
+    fontSize: "13px",
+    color: "#64748b",
+    marginBottom: "4px",
+  },
+  topValue: {
+    fontSize: "22px",
+    fontWeight: "800",
+    color: "#111827",
+  },
+  title: {
+    textAlign: "center",
+    fontSize: "34px",
+    margin: "10px 0 24px 0",
+    color: "#1f2937",
+  },
+  mainArea: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "flex-start",
+    gap: "24px",
+    flexWrap: "wrap",
+  },
+  leftPanel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "16px",
+  },
+  faceArea: {
+    width: "360px",
+    height: "360px",
+    borderRadius: "24px",
+    overflow: "hidden",
+    background: "#ffffff",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+    position: "relative",
+    touchAction: "none",
+    userSelect: "none",
+    cursor: "pointer",
+  },
+  canvas: {
+    width: "100%",
+    height: "100%",
+    display: "block",
+  },
+  faceGuideText: {
+    position: "absolute",
+    bottom: "14px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "rgba(255,255,255,0.88)",
+    padding: "8px 12px",
+    borderRadius: "999px",
+    fontSize: "13px",
+    color: "#475569",
+    pointerEvents: "none",
+    whiteSpace: "nowrap",
+  },
+  toolBar: {
+    width: "360px",
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+  toolButton: {
+    flex: 1,
+    minWidth: "100px",
+    padding: "12px 14px",
+    border: "none",
+    borderRadius: "14px",
+    background: "#111827",
+    color: "#ffffff",
+    fontWeight: "700",
+    cursor: "pointer",
+  },
+  toolButtonActive: {
+    background: "#2563eb",
+  },
+  toolButtonSecondary: {
+    flex: 1,
+    minWidth: "100px",
+    padding: "12px 14px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "14px",
+    background: "#ffffff",
+    color: "#111827",
+    fontWeight: "700",
+    cursor: "pointer",
+  },
+  playGuideBox: {
+    width: "360px",
+    background: "#ffffff",
+    borderRadius: "18px",
+    padding: "16px",
+    boxShadow: "0 6px 20px rgba(0,0,0,0.06)",
+    boxSizing: "border-box",
+  },
+  playGuideTitle: {
+    margin: "0 0 8px 0",
+    fontWeight: "700",
+    color: "#1d4ed8",
+  },
+  playGuideText: {
+    margin: "6px 0",
+    fontSize: "14px",
+    color: "#475569",
+    lineHeight: "1.5",
+  },
+  sidePanel: {
+    width: "320px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
+  },
+  gaugeCard: {
+    background: "#ffffff",
+    borderRadius: "18px",
+    padding: "16px",
+    boxShadow: "0 6px 20px rgba(0,0,0,0.06)",
+  },
+  gaugeLabel: {
+    fontSize: "14px",
+    color: "#475569",
+    marginBottom: "10px",
+    fontWeight: "600",
+  },
+  gaugeBg: {
+    width: "100%",
+    height: "16px",
+    background: "#e5e7eb",
+    borderRadius: "999px",
+    overflow: "hidden",
+  },
+  gaugeFill: {
+    height: "100%",
+    borderRadius: "999px",
+    transition: "width 0.08s linear",
+  },
+  gaugeValue: {
+    marginTop: "8px",
+    fontWeight: "700",
+    color: "#111827",
+  },
+  eventBox: {
+    background: "#fff8e6",
+    border: "1px solid #f3d38d",
+    borderRadius: "18px",
+    padding: "16px",
+    minHeight: "96px",
+  },
+  eventTitle: {
+    fontWeight: "800",
+    color: "#9a6700",
+    marginBottom: "8px",
+  },
+  eventContent: {
+    color: "#7c5b1a",
+    lineHeight: "1.5",
+    fontSize: "15px",
+  },
+  scoreHintBox: {
+    background: "#eefcf5",
+    border: "1px solid #b7f0ce",
+    borderRadius: "18px",
+    padding: "16px",
+  },
+  scoreHintTitle: {
+    fontWeight: "800",
+    color: "#047857",
+    marginBottom: "8px",
+  },
+  scoreHintText: {
+    color: "#065f46",
+    fontSize: "15px",
+    lineHeight: "1.5",
+  },
+};
+
+export default GamePage;
