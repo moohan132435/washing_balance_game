@@ -2,156 +2,34 @@ import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-const WADIZ_URL =
-  import.meta.env.VITE_WADIZ_URL ||
-  "https://www.wadiz.kr/web/campaign/detail/placeholder";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const WADIZ_URL = import.meta.env.VITE_WADIZ_URL || "https://www.wadiz.kr";
 
-function getScoreTone(score) {
-  if (score >= 90) {
-    return {
-      badge: "S급 밸런스 플레이",
-      title: "이 정도면 거의 트러블 응급처치 에이스예요",
-      curiosity: "실전에서도 이 밸런스를 유지하려면, 세정 다음 단계에서 무엇을 더해야 할까요?",
-      hook: "잘 씻는 것만으로 끝나지 않는 보호 루틴을 확인해보세요.",
-    };
-  }
-
-  if (score >= 75) {
-    return {
-      badge: "A급 루틴 감각",
-      title: "균형감은 좋았고, 마지막 한 끗이 아쉬웠어요",
-      curiosity: "좋은 플레이가 더 좋아지려면, 진정과 보호를 어떻게 이어야 할까요?",
-      hook: "트러블 케어 루틴의 마지막 연결고리를 와디즈에서 확인해보세요.",
-    };
-  }
-
-  if (score >= 60) {
-    return {
-      badge: "B급 과몰입 클렌저",
-      title: "열심히 씻었지만, 케어가 세정보다 뒤로 밀렸어요",
-      curiosity: "왜 많이 씻을수록 오히려 아쉬운 결과가 나왔을까요?",
-      hook: "과세정 없이 쫀쫀하게 관리하는 포인트를 와디즈에서 확인해보세요.",
-    };
-  }
-
-  if (score >= 40) {
-    return {
-      badge: "C급 순서 재정비 필요",
-      title: "무엇을 해야 하는지는 알았는데 타이밍이 엇갈렸어요",
-      curiosity: "연고, 패치, 세안의 순서가 왜 이렇게 중요할까요?",
-      hook: "순서가 바뀌면 체감도 달라지는 이유를 와디즈에서 확인해보세요.",
-    };
-  }
-
-  return {
-    badge: "주의! 과세정 위험",
-    title: "지금은 강하게 씻기보다 밸런스를 되찾는 게 먼저예요",
-    curiosity: "깨끗함만 쫓으면 왜 오히려 피부 컨디션이 흔들릴까요?",
-    hook: "세정력과 보호력의 균형이 왜 중요한지 와디즈에서 확인해보세요.",
-  };
-}
-
-function buildInsightData(result) {
-  const cleanRate = Math.round(result.cleanRate || 0);
-  const irritation = Math.round(result.irritation || 0);
-  const moisture = Math.round(result.moisture || 0);
-  const totalAcne = result.careStats?.totalAcne ?? 0;
-  const revealedCount = result.careStats?.revealedCount ?? 0;
-  const treatedCount = result.careStats?.treatedCount ?? 0;
-  const patchedCount = result.careStats?.patchedCount ?? 0;
-
-  const scoreTone = getScoreTone(result.score || 0);
-
-  const strongPoints = [];
-  const weakPoints = [];
-  const wadizPoints = [];
-
-  if (cleanRate >= 55 && cleanRate <= 82) {
-    strongPoints.push("세정 강도를 비교적 적절하게 맞췄어요.");
-  } else if (cleanRate > 82) {
-    weakPoints.push("세정이 과해서 피부 밸런스가 쉽게 무너졌어요.");
-    wadizPoints.push("쫀쫀하게 씻기되 과하지 않게 마무리하는 세정 밸런스");
-  } else {
-    weakPoints.push("세정이 부족해 숨은 상태를 충분히 확인하지 못했어요.");
-    wadizPoints.push("잔여 노폐감 없이 깔끔하게 정리되는 세안 루틴");
-  }
-
-  if (irritation <= 40) {
-    strongPoints.push("자극 관리를 잘해서 흐름이 안정적이었어요.");
-  } else {
-    weakPoints.push("문지르는 강도나 도구 사용으로 자극이 높아졌어요.");
-    wadizPoints.push("당김과 자극 부담을 줄이는 진정형 사용감");
-  }
-
-  if (moisture >= 40) {
-    strongPoints.push("수분 밸런스를 어느 정도 유지했어요.");
-  } else {
-    weakPoints.push("세안 후 보호력이 부족해 건조하게 끝났어요.");
-    wadizPoints.push("세안 뒤에도 당기지 않는 보호감 있는 마무리");
-  }
-
-  if (totalAcne === 0) {
-    strongPoints.push("이번 판은 트러블 수가 적어 기본 밸런스 유지가 중요했어요.");
-    wadizPoints.push("트러블이 올라오기 전부터 관리하는 데일리 루틴");
-  } else {
-    if (revealedCount === totalAcne) {
-      strongPoints.push("등장한 트러블을 끝까지 잘 발견했어요.");
-    } else {
-      weakPoints.push("올라온 트러블을 모두 발견하지는 못했어요.");
-      wadizPoints.push("씻으면서도 피부 변화를 더 빨리 알아차리는 체감 포인트");
-    }
-
-    if (treatedCount >= Math.max(1, totalAcne - 1)) {
-      strongPoints.push("연고 처리 타이밍이 꽤 좋았어요.");
-    } else {
-      weakPoints.push("발견 후 진정 액션으로 이어지는 속도가 아쉬웠어요.");
-      wadizPoints.push("세안 후 다음 케어로 자연스럽게 넘어가는 루틴 연결감");
-    }
-
-    if (patchedCount >= Math.max(1, treatedCount)) {
-      strongPoints.push("보호 마무리까지 신경 쓴 플레이였어요.");
-    } else {
-      weakPoints.push("진정 후 보호 마무리가 부족했어요.");
-      wadizPoints.push("트러블 부위를 보호하면서 일상 루틴으로 이어가는 마무리감");
-    }
-  }
-
-  if (strongPoints.length === 0) {
-    strongPoints.push("이번 판에서는 우선 흐름을 익히는 게 핵심이었어요.");
-  }
-
-  if (weakPoints.length === 0) {
-    weakPoints.push("전체 흐름은 좋았고, 실전에서는 지속력 있는 루틴 설계가 다음 과제예요.");
-  }
-
-  const persona =
-    irritation >= 55
-      ? "자극 과몰입형"
-      : moisture <= 35
-      ? "건조 엔딩형"
-      : treatedCount < revealedCount
-      ? "발견 후 머뭇형"
-      : patchedCount < treatedCount
-      ? "케어 마무리 부족형"
-      : "밸런스 감각형";
-
-  const nextMission =
-    result.score >= 85
-      ? "다음 판에서는 90점 이상 + 랭킹 1위를 노려보세요."
-      : result.score >= 60
-      ? "다음 판에서는 과세정 없이 연고 → 패치 흐름을 더 빠르게 이어보세요."
-      : "다음 판에서는 먼저 얼굴 상태를 보고, 필요할 때만 케어 도구를 써보세요.";
-
-  return {
-    scoreTone,
-    strongPoints: strongPoints.slice(0, 3),
-    weakPoints: weakPoints.slice(0, 3),
-    wadizPoints: [...new Set(wadizPoints)].slice(0, 3),
-    persona,
-    nextMission,
-  };
-}
+const FALLBACK_RESULT = {
+  nickname: localStorage.getItem("nickname") || "PLAYER",
+  score: 0,
+  grade: "결과 없음",
+  cleanRate: 0,
+  irritation: 0,
+  moisture: 0,
+  balanceTime: 0,
+  resultMessage: "결과 데이터가 없습니다.",
+  ctaText: "와디즈에서 이어서 보기",
+  scenarioSummary: "",
+  scoreBreakdown: {
+    cleaningScore: 0,
+    irritationScore: 0,
+    discoveryScore: 0,
+    careOrderScore: 0,
+    protectionScore: 0,
+  },
+  careStats: {
+    totalAcne: 0,
+    revealedCount: 0,
+    treatedCount: 0,
+    patchedCount: 0,
+  },
+};
 
 function ResultPage() {
   const location = useLocation();
@@ -160,32 +38,20 @@ function ResultPage() {
   const [saveStatus, setSaveStatus] = useState("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const [saved, setSaved] = useState(false);
+  const [screenWidth, setScreenWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 390
+  );
 
-  const result = location.state || {
-    nickname: localStorage.getItem("nickname") || "PLAYER",
-    score: 0,
-    grade: "결과 없음",
-    cleanRate: 0,
-    irritation: 0,
-    moisture: 0,
-    balanceTime: 0,
-    resultMessage: "결과 데이터가 없습니다.",
-    ctaText: "와디즈 보러가기",
-    scenarioSummary: "",
-    scoreBreakdown: {
-      cleaningScore: 0,
-      irritationScore: 0,
-      discoveryScore: 0,
-      careOrderScore: 0,
-      protectionScore: 0,
-    },
-    careStats: {
-      totalAcne: 0,
-      revealedCount: 0,
-      treatedCount: 0,
-      patchedCount: 0,
-    },
-  };
+  useEffect(() => {
+    const handleResize = () => setScreenWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const isMobile = screenWidth <= 768;
+  const isNarrow = screenWidth <= 430;
+
+  const result = location.state || FALLBACK_RESULT;
 
   const payload = useMemo(
     () => ({
@@ -201,8 +67,6 @@ function ResultPage() {
     [result]
   );
 
-  const insightData = useMemo(() => buildInsightData(result), [result]);
-
   useEffect(() => {
     const saveScore = async () => {
       if (saved) return;
@@ -217,11 +81,11 @@ function ResultPage() {
         setSaveStatus("saving");
         setSaveMessage("랭킹 저장 중...");
 
-        await axios.post(`${API_BASE_URL}/api/scores`, payload);
+        const response = await axios.post(`${API_BASE_URL}/api/scores`, payload);
 
         setSaved(true);
         setSaveStatus("success");
-        setSaveMessage("랭킹 저장 완료");
+        setSaveMessage(response?.data?.message || "랭킹 저장 완료");
       } catch (error) {
         setSaveStatus("error");
         setSaveMessage(
@@ -235,11 +99,19 @@ function ResultPage() {
     saveScore();
   }, [payload, saved]);
 
+  const scoreBreakdown = result.scoreBreakdown || FALLBACK_RESULT.scoreBreakdown;
+  const careStats = result.careStats || FALLBACK_RESULT.careStats;
+
+  const topStrengths = getStrengths(result, scoreBreakdown, careStats).slice(0, 3);
+  const topWeaknesses = getWeaknesses(result, scoreBreakdown, careStats).slice(0, 3);
+  const wadizPoints = getWadizPoints(result);
+  const nextMission = getNextMission(result, scoreBreakdown, careStats);
+
   const handleWadizClick = () => {
     window.open(WADIZ_URL, "_blank", "noopener,noreferrer");
   };
 
-  const handleRetrySave = async () => {
+  const handleRetrySave = () => {
     setSaved(false);
     setSaveStatus("idle");
     setSaveMessage("");
@@ -247,173 +119,138 @@ function ResultPage() {
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.card}>
-        <div style={styles.heroBadge}>{insightData.scoreTone.badge}</div>
-        <h1 style={styles.title}>게임 결과</h1>
-        <div style={styles.heroTitle}>{insightData.scoreTone.title}</div>
+      <div style={styles.card(isMobile)}>
+        <div style={styles.hero(isMobile)}>
+          <div style={styles.heroTop(isMobile)}>
+            <div>
+              <div style={styles.gradeBadge}>{result.grade}</div>
+              <h1 style={styles.title(isMobile)}>게임 결과</h1>
+              <p style={styles.resultMessage(isMobile)}>{result.resultMessage}</p>
+            </div>
 
-        <div style={styles.heroSection}>
-          <div style={styles.scoreCircle}>
-            <div style={styles.scoreLabel}>SCORE</div>
-            <div style={styles.scoreValue}>{result.score}</div>
+            <div style={styles.scoreCard(isMobile)}>
+              <div style={styles.scoreLabel}>SCORE</div>
+              <div style={styles.scoreValue(isMobile)}>{result.score}</div>
+              <div style={styles.scoreSubtext}>{getScoreComment(result.score)}</div>
+            </div>
           </div>
 
-          <div style={styles.heroInfoBox}>
-            <div style={styles.nickname}>{result.nickname}</div>
-            <div style={styles.grade}>{result.grade}</div>
-            <div style={styles.message}>{result.resultMessage}</div>
-            <div style={styles.scenario}>{result.scenarioSummary}</div>
-            <div style={styles.personaChip}>이번 플레이 성향: {insightData.persona}</div>
+          <div style={styles.summaryChips(isMobile)}>
+            <div style={styles.summaryChip}>닉네임 {result.nickname}</div>
+            {result.scenarioSummary ? (
+              <div style={styles.summaryChipMuted}>{result.scenarioSummary}</div>
+            ) : null}
           </div>
         </div>
 
-        <div style={styles.teaserBox}>
-          <div style={styles.teaserTitle}>이 결과가 재밌는 이유</div>
-          <div style={styles.teaserQuestion}>{insightData.scoreTone.curiosity}</div>
-          <div style={styles.teaserText}>{insightData.scoreTone.hook}</div>
+        <div style={styles.saveBox(saveStatus)}>
+          <div style={styles.sectionEyebrow}>랭킹 저장 상태</div>
+          <div style={styles.saveMessage(saveStatus)}>{saveMessage || "저장 대기중"}</div>
+          <div style={styles.apiInfo}>{API_BASE_URL || "VITE_API_BASE_URL이 비어 있습니다."}</div>
         </div>
 
-        <div style={styles.statusBox}>
-          <div style={styles.statusTitle}>랭킹 저장 상태</div>
-          <div
-            style={{
-              ...styles.statusMessage,
-              ...(saveStatus === "success"
-                ? styles.statusSuccess
-                : saveStatus === "error"
-                ? styles.statusError
-                : saveStatus === "saving"
-                ? styles.statusSaving
-                : {}),
-            }}
-          >
-            {saveMessage || "저장 대기중"}
-          </div>
-          <div style={styles.apiInfo}>API: {API_BASE_URL || "(비어 있음)"}</div>
-        </div>
-
-        <div style={styles.statGrid}>
-          <StatCard label="세정 진행도" value={Math.round(result.cleanRate || 0)} />
-          <StatCard label="자극" value={Math.round(result.irritation || 0)} />
-          <StatCard label="수분" value={Math.round(result.moisture || 0)} />
+        <div style={styles.statGrid(isNarrow)}>
+          <StatCard label="세정 진행도" value={Math.round(result.cleanRate || 0)} suffix="" />
+          <StatCard label="자극" value={Math.round(result.irritation || 0)} suffix="" />
+          <StatCard label="수분" value={Math.round(result.moisture || 0)} suffix="" />
           <StatCard
             label="균형 유지"
-            value={`${Number(result.balanceTime || 0).toFixed(1)}초`}
+            value={Number(result.balanceTime || 0).toFixed(1)}
+            suffix="초"
           />
         </div>
 
-        <div style={styles.analysisGrid}>
-          <InsightCard
-            title="잘한 포인트"
-            items={insightData.strongPoints}
-            accent="#0f766e"
-            bg="#f0fdfa"
-          />
-          <InsightCard
-            title="아쉬운 포인트"
-            items={insightData.weakPoints}
-            accent="#b45309"
-            bg="#fff7ed"
-          />
+        <div style={styles.reasonBox}>
+          <div style={styles.sectionEyebrow}>이 결과가 재밌는 이유</div>
+          <h2 style={styles.reasonTitle(isMobile)}>{getReasonTitle(result, scoreBreakdown)}</h2>
+          <p style={styles.reasonDescription}>{getReasonDescription(result, scoreBreakdown)}</p>
         </div>
 
-        <div style={styles.recommendBox}>
-          <div style={styles.sectionTitle}>와디즈에서 이어서 볼 포인트</div>
-          <div style={styles.recommendSubtitle}>
-            게임에서 궁금해진 포인트를 실제 제품/상세 페이지에서 이어보게 만드는 영역이에요.
-          </div>
-          <div style={styles.recommendList}>
-            {insightData.wadizPoints.map((item, index) => (
-              <div key={item} style={styles.recommendItem}>
-                <div style={styles.recommendNumber}>0{index + 1}</div>
-                <div style={styles.recommendText}>{item}</div>
+        <div style={styles.twoColumn(isMobile)}>
+          <ListCard title="잘한 포인트" tone="good" items={topStrengths} />
+          <ListCard title="아쉬운 포인트" tone="bad" items={topWeaknesses} />
+        </div>
+
+        <div style={styles.wadizBox}>
+          <div style={styles.sectionEyebrowAccent}>와디즈에서 이어서 볼 포인트</div>
+          <p style={styles.wadizDescription}>
+            게임에서 궁금해진 포인트를 실제 제품/상세페이지에서 이어보게 만드는 영역이에요.
+          </p>
+
+          <div style={styles.wadizList}>
+            {wadizPoints.map((item, index) => (
+              <div key={`${item}-${index}`} style={styles.wadizItem(isMobile)}>
+                <div style={styles.wadizNumber}>{String(index + 1).padStart(2, "0")}</div>
+                <div style={styles.wadizText}>{item}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={styles.breakdownBox}>
-          <h3 style={styles.sectionTitle}>점수 구성</h3>
-          <div style={styles.breakdownItem}>
-            세정 점수: {result.scoreBreakdown?.cleaningScore ?? 0}
-          </div>
-          <div style={styles.breakdownItem}>
-            자극 관리 점수: {result.scoreBreakdown?.irritationScore ?? 0}
-          </div>
-          <div style={styles.breakdownItem}>
-            문제 발견 점수: {result.scoreBreakdown?.discoveryScore ?? 0}
-          </div>
-          <div style={styles.breakdownItem}>
-            케어 순서 점수: {result.scoreBreakdown?.careOrderScore ?? 0}
-          </div>
-          <div style={styles.breakdownItem}>
-            보호 마무리 점수: {result.scoreBreakdown?.protectionScore ?? 0}
-          </div>
-        </div>
+        <div style={styles.twoColumn(isMobile)}>
+          <DetailBox title="점수 구성">
+            <DetailRow label="세정 점수" value={scoreBreakdown.cleaningScore ?? 0} />
+            <DetailRow label="자극 관리 점수" value={scoreBreakdown.irritationScore ?? 0} />
+            <DetailRow label="문제 발견 점수" value={scoreBreakdown.discoveryScore ?? 0} />
+            <DetailRow label="케어 순서 점수" value={scoreBreakdown.careOrderScore ?? 0} />
+            <DetailRow label="보호 마무리 점수" value={scoreBreakdown.protectionScore ?? 0} />
+          </DetailBox>
 
-        <div style={styles.breakdownBox}>
-          <h3 style={styles.sectionTitle}>처리 결과</h3>
-          <div style={styles.breakdownItem}>
-            총 여드름 수: {result.careStats?.totalAcne ?? 0}
-          </div>
-          <div style={styles.breakdownItem}>
-            발견한 여드름 수: {result.careStats?.revealedCount ?? 0}
-          </div>
-          <div style={styles.breakdownItem}>
-            연고 처리 수: {result.careStats?.treatedCount ?? 0}
-          </div>
-          <div style={styles.breakdownItem}>
-            패치 부착 수: {result.careStats?.patchedCount ?? 0}
-          </div>
+          <DetailBox title="처리 결과">
+            <DetailRow label="총 여드름 수" value={careStats.totalAcne ?? 0} />
+            <DetailRow label="발견한 여드름 수" value={careStats.revealedCount ?? 0} />
+            <DetailRow label="연고 처리 수" value={careStats.treatedCount ?? 0} />
+            <DetailRow label="패치 부착 수" value={careStats.patchedCount ?? 0} />
+          </DetailBox>
         </div>
 
         <div style={styles.missionBox}>
-          <div style={styles.missionTitle}>다음 미션</div>
-          <div style={styles.missionText}>{insightData.nextMission}</div>
+          <div style={styles.sectionEyebrowBlue}>다음 미션</div>
+          <div style={styles.missionText}>{nextMission}</div>
         </div>
 
         <div style={styles.buttonGroup}>
           <button style={styles.primaryButton} onClick={handleWadizClick}>
-            {result.ctaText || "와디즈에서 루틴 이어보기"}
+            {result.ctaText || "와디즈에서 루틴 보기"}
           </button>
-          <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>
-            랭킹 보기
-          </button>
-          <button style={styles.secondaryButton} onClick={() => navigate("/game")}>
-            다시하기
-          </button>
-          <button style={styles.secondaryButton} onClick={() => navigate("/")}>
-            처음으로
-          </button>
-          {saveStatus === "error" && (
-            <button style={styles.secondaryButton} onClick={handleRetrySave}>
-              저장 재시도
-            </button>
-          )}
+
+          <div style={styles.secondaryGrid(isMobile)}>
+            <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>랭킹 보기</button>
+            <button style={styles.secondaryButton} onClick={() => navigate("/game")}>다시하기</button>
+            <button style={styles.secondaryButton} onClick={() => navigate("/")}>처음으로</button>
+            {saveStatus === "error" ? (
+              <button style={styles.secondaryButton} onClick={handleRetrySave}>저장 재시도</button>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function StatCard({ label, value }) {
+function StatCard({ label, value, suffix }) {
   return (
     <div style={styles.statCard}>
       <div style={styles.statLabel}>{label}</div>
-      <div style={styles.statValue}>{value}</div>
+      <div style={styles.statValueWrap}>
+        <span style={styles.statValue}>{value}</span>
+        {suffix ? <span style={styles.statSuffix}>{suffix}</span> : null}
+      </div>
     </div>
   );
 }
 
-function InsightCard({ title, items, accent, bg }) {
+function ListCard({ title, tone, items }) {
+  const isGood = tone === "good";
+
   return (
-    <div style={{ ...styles.insightCard, background: bg }}>
-      <div style={{ ...styles.insightTitle, color: accent }}>{title}</div>
-      <div style={styles.insightList}>
-        {items.map((item) => (
-          <div key={item} style={styles.insightItem}>
-            <span style={{ ...styles.insightDot, background: accent }} />
-            <span>{item}</span>
+    <div style={styles.listCard(isGood)}>
+      <h3 style={styles.listTitle(isGood)}>{title}</h3>
+      <div style={styles.listItems}>
+        {items.map((item, index) => (
+          <div key={`${title}-${index}`} style={styles.listItem}>
+            <span style={styles.bullet(isGood)} />
+            <span style={styles.listText}>{item}</span>
           </div>
         ))}
       </div>
@@ -421,350 +258,549 @@ function InsightCard({ title, items, accent, bg }) {
   );
 }
 
+function DetailBox({ title, children }) {
+  return (
+    <div style={styles.detailBox}>
+      <h3 style={styles.detailTitle}>{title}</h3>
+      <div style={styles.detailRows}>{children}</div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <div style={styles.detailRow}>
+      <span style={styles.detailLabel}>{label}</span>
+      <span style={styles.detailValue}>{value}</span>
+    </div>
+  );
+}
+
+function getScoreComment(score) {
+  if (score >= 90) return "거의 프로 루틴";
+  if (score >= 75) return "흐름이 꽤 좋았어요";
+  if (score >= 60) return "조금만 다듬으면 더 좋아져요";
+  return "다음 판에서 반등 가능";
+}
+
+function getReasonTitle(result, breakdown) {
+  if ((result.cleanRate || 0) >= 90 && (result.irritation || 0) >= 75) {
+    return "왜 많이 씻을수록 오히려 아쉬운 결과가 나왔을까요?";
+  }
+
+  if ((breakdown.careOrderScore || 0) <= 8) {
+    return "여드름을 발견해도 순서가 꼬이면 점수가 왜 떨어질까요?";
+  }
+
+  if ((result.moisture || 0) <= 25) {
+    return "깨끗해 보여도 마무리가 건조하면 왜 아쉬울까요?";
+  }
+
+  return "점수는 괜찮았는데 왜 더 높은 등급이 안 나왔을까요?";
+}
+
+function getReasonDescription(result, breakdown) {
+  if ((result.cleanRate || 0) >= 90 && (result.irritation || 0) >= 75) {
+    return "과세정 없이 쫀쫀하게 관리하는 포인트를 와디즈에서 확인해보세요.";
+  }
+
+  if ((breakdown.careOrderScore || 0) <= 8) {
+    return "세안 후 연고와 패치를 어떤 순서로 이어야 덜 자극적인지 상세페이지에서 자연스럽게 이어볼 수 있어요.";
+  }
+
+  if ((result.moisture || 0) <= 25) {
+    return "세안 직후 당김을 줄이고 마무리감을 높이는 포인트가 다음 클릭 이유가 되게 구성했어요.";
+  }
+
+  return "결과에서 생긴 궁금증이 실제 제품 이해로 이어지도록 문구 흐름을 설계했어요.";
+}
+
+function getStrengths(result, breakdown, careStats) {
+  const items = [];
+
+  if ((careStats.revealedCount || 0) >= Math.max(1, (careStats.totalAcne || 0) - 1)) {
+    items.push("등장한 트러블을 끝까지 잘 발견했어요.");
+  }
+  if ((careStats.treatedCount || 0) >= 3) {
+    items.push("연고 처리 타이밍이 꽤 좋았어요.");
+  }
+  if ((careStats.patchedCount || 0) >= (careStats.treatedCount || 0)) {
+    items.push("보호 마무리까지 신경 쓴 플레이였어요.");
+  }
+  if ((breakdown.cleaningScore || 0) >= 14) {
+    items.push("세정 자체는 충분히 해낸 편이에요.");
+  }
+  if ((breakdown.discoveryScore || 0) >= 12) {
+    items.push("숨은 문제를 놓치지 않으려는 흐름이 좋았어요.");
+  }
+
+  if (items.length === 0) {
+    items.push("기본 플레이 흐름은 잘 잡았어요.");
+  }
+
+  return items;
+}
+
+function getWeaknesses(result, breakdown, careStats) {
+  const items = [];
+
+  if ((result.cleanRate || 0) >= 90) {
+    items.push("세정이 과해서 피부 밸런스가 쉽게 무너졌어요.");
+  }
+  if ((result.irritation || 0) >= 70) {
+    items.push("문지르는 강도나 도구 사용으로 자극이 높아졌어요.");
+  }
+  if ((result.moisture || 0) <= 25) {
+    items.push("세안 후 보호력이 부족해 건조하게 끝났어요.");
+  }
+  if ((breakdown.careOrderScore || 0) <= 8) {
+    items.push("연고와 패치 순서가 조금 더 매끄러우면 점수가 올라가요.");
+  }
+  if ((careStats.treatedCount || 0) < (careStats.revealedCount || 0)) {
+    items.push("발견한 트러블을 모두 빠르게 케어하진 못했어요.");
+  }
+
+  if (items.length === 0) {
+    items.push("조금만 더 빠르게 마무리하면 상위 결과가 가능해요.");
+  }
+
+  return items;
+}
+
+function getWadizPoints(result) {
+  if ((result.cleanRate || 0) >= 90) {
+    return [
+      "쫀쫀하게 씻기되 과하지 않게 마무리하는 세정 밸런스",
+      "당김과 자극 부담을 줄이는 진정형 사용감",
+      "세안 뒤에도 당기지 않는 보호감 있는 마무리",
+    ];
+  }
+
+  if ((result.moisture || 0) <= 25) {
+    return [
+      "세안 직후 건조함을 덜 느끼게 하는 마무리 포인트",
+      "클렌징 후에도 피부가 편안한 사용감 설계",
+      "자극은 줄이고 개운함은 남기는 루틴 방향",
+    ];
+  }
+
+  return [
+    "여드름 케어 루틴과 함께 보기 좋은 세정 밸런스",
+    "과세정 없이 개운함을 챙기는 사용감 포인트",
+    "게임에서 놓친 루틴 디테일을 실제 상세페이지에서 이어보기",
+  ];
+}
+
+function getNextMission(result, breakdown, careStats) {
+  if ((result.cleanRate || 0) >= 90) {
+    return "다음 판에서는 과세정 없이 연고 → 패치 흐름을 더 빠르게 이어보세요.";
+  }
+
+  if ((breakdown.careOrderScore || 0) <= 8) {
+    return "다음 판에서는 발견 즉시 연고, 그 다음 패치 순서를 더 또렷하게 가져가보세요.";
+  }
+
+  if ((careStats.revealedCount || 0) < (careStats.totalAcne || 0)) {
+    return "다음 판에서는 메이크업 아래 숨은 트러블까지 더 빨리 찾아보세요.";
+  }
+
+  return "다음 판에서는 지금 흐름을 유지하면서 자극만 조금 더 낮춰보세요.";
+}
+
 const styles = {
   wrapper: {
     minHeight: "100vh",
-    background:
-      "linear-gradient(180deg, #fffaf5 0%, #fdf2f8 36%, #eef4ff 100%)",
-    padding: "24px 16px 48px",
+    background: "linear-gradient(180deg, #f7f4ee 0%, #eef3ff 100%)",
+    padding: "16px",
     boxSizing: "border-box",
   },
-  card: {
+  card: (isMobile) => ({
+    width: "100%",
     maxWidth: "920px",
     margin: "0 auto",
-    background: "rgba(255,255,255,0.96)",
-    borderRadius: "28px",
-    padding: "28px",
-    boxShadow: "0 18px 50px rgba(15, 23, 42, 0.10)",
-    border: "1px solid rgba(255,255,255,0.85)",
-  },
-  heroBadge: {
+    background: "#ffffff",
+    borderRadius: isMobile ? "24px" : "32px",
+    padding: isMobile ? "20px 16px 24px" : "32px",
+    boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)",
+    boxSizing: "border-box",
+  }),
+  hero: (isMobile) => ({
+    background: "linear-gradient(135deg, #fffaf2 0%, #fff 55%, #f6f7ff 100%)",
+    border: "1px solid #f1eadf",
+    borderRadius: isMobile ? "22px" : "28px",
+    padding: isMobile ? "18px" : "24px",
+    marginBottom: "16px",
+  }),
+  heroTop: (isMobile) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) 220px",
+    gap: "16px",
+    alignItems: "start",
+  }),
+  gradeBadge: {
     display: "inline-flex",
     alignItems: "center",
+    justifyContent: "center",
     padding: "8px 14px",
     borderRadius: "999px",
-    background: "#fff1f2",
-    color: "#be123c",
-    fontSize: "13px",
-    fontWeight: 700,
+    background: "#fdecef",
+    color: "#c53b57",
+    fontWeight: 800,
+    fontSize: "14px",
     marginBottom: "14px",
   },
-  title: {
+  title: (isMobile) => ({
     margin: 0,
-    fontSize: "38px",
-    fontWeight: 800,
-    color: "#111827",
-  },
-  heroTitle: {
-    marginTop: "10px",
-    fontSize: "20px",
-    fontWeight: 700,
+    fontSize: isMobile ? "42px" : "52px",
+    lineHeight: 1.02,
+    letterSpacing: "-0.04em",
+    color: "#0f172a",
+  }),
+  resultMessage: (isMobile) => ({
+    margin: "18px 0 0",
+    fontSize: isMobile ? "28px" : "34px",
+    lineHeight: 1.32,
+    letterSpacing: "-0.03em",
     color: "#374151",
-    lineHeight: 1.45,
-  },
-  heroSection: {
-    display: "grid",
-    gridTemplateColumns: "220px 1fr",
-    gap: "22px",
-    marginTop: "24px",
-    alignItems: "stretch",
-  },
-  scoreCircle: {
-    minHeight: "220px",
-    borderRadius: "28px",
-    background: "linear-gradient(180deg, #fff7ed 0%, #fef3c7 100%)",
+    fontWeight: 800,
+    wordBreak: "keep-all",
+  }),
+  scoreCard: (isMobile) => ({
+    background: "#fbf2d9",
+    border: "1px solid #f0dfb1",
+    borderRadius: isMobile ? "22px" : "28px",
+    minHeight: isMobile ? "auto" : "260px",
+    padding: isMobile ? "22px 18px" : "28px 20px",
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
-    boxShadow: "inset 0 0 0 1px rgba(251, 191, 36, 0.20)",
-  },
+  }),
   scoreLabel: {
     fontSize: "14px",
-    fontWeight: 700,
-    color: "#92400e",
-    letterSpacing: "0.08em",
-  },
-  scoreValue: {
-    marginTop: "10px",
-    fontSize: "64px",
+    letterSpacing: "0.18em",
+    color: "#9a3412",
     fontWeight: 800,
-    color: "#7c2d12",
-    lineHeight: 1,
-  },
-  heroInfoBox: {
-    borderRadius: "24px",
-    padding: "22px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    justifyContent: "center",
-  },
-  nickname: {
-    fontSize: "22px",
-    fontWeight: 800,
-    color: "#111827",
-  },
-  grade: {
-    display: "inline-flex",
-    alignItems: "center",
-    width: "fit-content",
-    padding: "8px 12px",
-    borderRadius: "999px",
-    background: "#eff6ff",
-    color: "#1d4ed8",
-    fontSize: "14px",
-    fontWeight: 700,
-  },
-  message: {
-    fontSize: "15px",
-    lineHeight: 1.6,
-    color: "#374151",
-  },
-  scenario: {
-    fontSize: "14px",
-    lineHeight: 1.6,
-    color: "#64748b",
-  },
-  personaChip: {
-    width: "fit-content",
-    marginTop: "4px",
-    padding: "8px 12px",
-    borderRadius: "999px",
-    background: "#fdf2f8",
-    color: "#be185d",
-    fontSize: "13px",
-    fontWeight: 700,
-  },
-  teaserBox: {
-    marginTop: "22px",
-    borderRadius: "22px",
-    padding: "22px",
-    background: "linear-gradient(135deg, #111827 0%, #374151 100%)",
-    color: "#ffffff",
-  },
-  teaserTitle: {
-    fontSize: "14px",
-    fontWeight: 700,
-    color: "#f9a8d4",
-  },
-  teaserQuestion: {
-    marginTop: "8px",
-    fontSize: "24px",
-    fontWeight: 800,
-    lineHeight: 1.45,
-  },
-  teaserText: {
-    marginTop: "10px",
-    fontSize: "15px",
-    lineHeight: 1.7,
-    color: "rgba(255,255,255,0.82)",
-  },
-  statusBox: {
-    marginTop: "20px",
-    borderRadius: "18px",
-    padding: "16px 18px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-  },
-  statusTitle: {
-    fontSize: "13px",
-    fontWeight: 700,
-    color: "#475569",
     marginBottom: "8px",
   },
-  statusMessage: {
+  scoreValue: (isMobile) => ({
+    fontSize: isMobile ? "72px" : "86px",
+    fontWeight: 900,
+    lineHeight: 1,
+    color: "#9a3412",
+  }),
+  scoreSubtext: {
+    marginTop: "10px",
+    color: "#7c2d12",
     fontSize: "14px",
     fontWeight: 700,
+  },
+  summaryChips: (isMobile) => ({
+    marginTop: "16px",
+    display: "flex",
+    gap: "10px",
+    flexWrap: "wrap",
+    flexDirection: isMobile ? "column" : "row",
+  }),
+  summaryChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "10px 14px",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    border: "1px solid #e5e7eb",
+    color: "#0f172a",
+    fontSize: "14px",
+    fontWeight: 700,
+  },
+  summaryChipMuted: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "10px 14px",
+    borderRadius: "14px",
+    background: "#f8fafc",
+    border: "1px solid #e5e7eb",
+    color: "#64748b",
+    fontSize: "14px",
+    lineHeight: 1.5,
+    wordBreak: "keep-all",
+  },
+  saveBox: (status) => ({
+    background: status === "error" ? "#fff7f7" : "#f8fafc",
+    border: `1px solid ${status === "error" ? "#fecaca" : "#e5e7eb"}`,
+    borderRadius: "20px",
+    padding: "16px",
+    marginBottom: "16px",
+  }),
+  sectionEyebrow: {
+    fontSize: "14px",
+    fontWeight: 800,
     color: "#475569",
+    marginBottom: "6px",
   },
-  statusSuccess: {
-    color: "#0f766e",
+  sectionEyebrowAccent: {
+    fontSize: "15px",
+    fontWeight: 800,
+    color: "#92400e",
+    marginBottom: "8px",
   },
-  statusError: {
-    color: "#b91c1c",
-  },
-  statusSaving: {
+  sectionEyebrowBlue: {
+    fontSize: "15px",
+    fontWeight: 800,
     color: "#1d4ed8",
+    marginBottom: "8px",
   },
+  saveMessage: (status) => ({
+    color:
+      status === "success"
+        ? "#047857"
+        : status === "error"
+        ? "#b91c1c"
+        : status === "saving"
+        ? "#a16207"
+        : "#334155",
+    fontSize: "16px",
+    fontWeight: 800,
+    lineHeight: 1.5,
+    wordBreak: "keep-all",
+  }),
   apiInfo: {
     marginTop: "8px",
-    fontSize: "12px",
     color: "#94a3b8",
+    fontSize: "13px",
     wordBreak: "break-all",
   },
-  statGrid: {
+  statGrid: (isNarrow) => ({
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: isNarrow ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
     gap: "12px",
-    marginTop: "20px",
-  },
+    marginBottom: "16px",
+  }),
   statCard: {
     background: "#ffffff",
     border: "1px solid #e5e7eb",
-    borderRadius: "18px",
-    padding: "18px 16px",
-    boxShadow: "0 6px 18px rgba(15, 23, 42, 0.05)",
+    borderRadius: "20px",
+    padding: "16px 14px",
+    minHeight: "112px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
   },
   statLabel: {
-    fontSize: "13px",
     color: "#64748b",
-    marginBottom: "8px",
+    fontSize: "14px",
+    lineHeight: 1.4,
+    wordBreak: "keep-all",
+  },
+  statValueWrap: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: "4px",
+    flexWrap: "wrap",
   },
   statValue: {
-    fontSize: "24px",
-    fontWeight: 800,
-    color: "#111827",
+    color: "#0f172a",
+    fontSize: "28px",
+    fontWeight: 900,
+    lineHeight: 1,
   },
-  analysisGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: "14px",
-    marginTop: "20px",
-  },
-  insightCard: {
-    borderRadius: "20px",
-    padding: "20px",
-    border: "1px solid rgba(15, 23, 42, 0.06)",
-  },
-  insightTitle: {
-    fontSize: "17px",
-    fontWeight: 800,
-    marginBottom: "14px",
-  },
-  insightList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "12px",
-  },
-  insightItem: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "10px",
-    color: "#334155",
-    fontSize: "14px",
-    lineHeight: 1.6,
-  },
-  insightDot: {
-    width: "8px",
-    height: "8px",
-    borderRadius: "50%",
-    marginTop: "8px",
-    flexShrink: 0,
-  },
-  recommendBox: {
-    marginTop: "20px",
-    borderRadius: "22px",
-    padding: "22px",
-    background: "#fff7ed",
-    border: "1px solid #fed7aa",
-  },
-  sectionTitle: {
-    margin: 0,
+  statSuffix: {
+    color: "#0f172a",
     fontSize: "18px",
     fontWeight: 800,
-    color: "#111827",
   },
-  recommendSubtitle: {
-    marginTop: "8px",
-    fontSize: "14px",
+  reasonBox: {
+    background: "linear-gradient(135deg, #0f172a 0%, #1e295b 100%)",
+    borderRadius: "24px",
+    padding: "20px",
+    marginBottom: "16px",
+  },
+  reasonTitle: (isMobile) => ({
+    margin: 0,
+    color: "#ffffff",
+    fontSize: isMobile ? "24px" : "34px",
+    lineHeight: 1.38,
+    letterSpacing: "-0.03em",
+    wordBreak: "keep-all",
+  }),
+  reasonDescription: {
+    margin: "14px 0 0",
+    color: "rgba(255,255,255,0.84)",
+    fontSize: "17px",
+    lineHeight: 1.65,
+    wordBreak: "keep-all",
+  },
+  twoColumn: (isMobile) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "repeat(2, minmax(0, 1fr))",
+    gap: "14px",
+    marginBottom: "16px",
+  }),
+  listCard: (isGood) => ({
+    background: isGood ? "#eef9f8" : "#fff7ef",
+    border: `1px solid ${isGood ? "#cfeeea" : "#f3dcc2"}`,
+    borderRadius: "22px",
+    padding: "18px",
+  }),
+  listTitle: (isGood) => ({
+    margin: "0 0 14px",
+    color: isGood ? "#0f766e" : "#b45309",
+    fontSize: "18px",
+    fontWeight: 900,
+  }),
+  listItems: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
+  },
+  listItem: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "12px",
+  },
+  bullet: (isGood) => ({
+    width: "12px",
+    height: "12px",
+    borderRadius: "50%",
+    background: isGood ? "#0f988d" : "#c75e0b",
+    marginTop: "6px",
+    flexShrink: 0,
+  }),
+  listText: {
+    color: "#334155",
+    fontSize: "17px",
+    lineHeight: 1.65,
+    wordBreak: "keep-all",
+  },
+  wadizBox: {
+    background: "#fffaf2",
+    border: "1px solid #f1d7ae",
+    borderRadius: "24px",
+    padding: "20px",
+    marginBottom: "16px",
+  },
+  wadizDescription: {
+    margin: "0 0 16px",
+    color: "#9a3412",
+    fontSize: "16px",
     lineHeight: 1.6,
-    color: "#7c2d12",
+    wordBreak: "keep-all",
   },
-  recommendList: {
-    marginTop: "16px",
+  wadizList: {
     display: "flex",
     flexDirection: "column",
     gap: "12px",
   },
-  recommendItem: {
-    display: "flex",
+  wadizItem: (isMobile) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "58px 1fr" : "70px 1fr",
     alignItems: "center",
-    gap: "12px",
-    borderRadius: "16px",
-    background: "rgba(255,255,255,0.72)",
-    padding: "14px 16px",
-  },
-  recommendNumber: {
-    width: "38px",
-    height: "38px",
-    borderRadius: "999px",
-    background: "#111827",
+    gap: "14px",
+    background: "#ffffff",
+    borderRadius: "18px",
+    padding: isMobile ? "14px" : "16px",
+  }),
+  wadizNumber: {
+    width: "52px",
+    height: "52px",
+    borderRadius: "50%",
+    background: "#0f172a",
     color: "#ffffff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "13px",
+    fontWeight: 900,
+    fontSize: "20px",
+  },
+  wadizText: {
+    color: "#0f172a",
+    fontSize: "17px",
+    lineHeight: 1.5,
+    fontWeight: 800,
+    wordBreak: "keep-all",
+  },
+  detailBox: {
+    background: "#ffffff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "24px",
+    padding: "20px",
+  },
+  detailTitle: {
+    margin: "0 0 14px",
+    color: "#0f172a",
+    fontSize: "18px",
+    fontWeight: 900,
+  },
+  detailRows: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  detailRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "10px",
+  },
+  detailLabel: {
+    color: "#475569",
+    fontSize: "16px",
+    lineHeight: 1.5,
+    wordBreak: "keep-all",
+  },
+  detailValue: {
+    color: "#0f172a",
+    fontSize: "16px",
     fontWeight: 800,
     flexShrink: 0,
   },
-  recommendText: {
-    fontSize: "14px",
-    lineHeight: 1.6,
-    color: "#1f2937",
-    fontWeight: 600,
-  },
-  breakdownBox: {
-    marginTop: "18px",
-    background: "#ffffff",
-    borderRadius: "20px",
-    border: "1px solid #e5e7eb",
-    padding: "20px",
-  },
-  breakdownItem: {
-    marginTop: "10px",
-    fontSize: "14px",
-    color: "#374151",
-    lineHeight: 1.6,
-  },
   missionBox: {
-    marginTop: "20px",
-    borderRadius: "20px",
+    background: "#eef4ff",
+    border: "1px solid #bfd7ff",
+    borderRadius: "24px",
     padding: "20px",
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-  },
-  missionTitle: {
-    fontSize: "14px",
-    fontWeight: 700,
-    color: "#1d4ed8",
+    marginBottom: "16px",
   },
   missionText: {
-    marginTop: "8px",
-    fontSize: "15px",
-    fontWeight: 700,
-    lineHeight: 1.6,
-    color: "#1e3a8a",
+    color: "#1e40af",
+    fontSize: "20px",
+    lineHeight: 1.55,
+    fontWeight: 800,
+    wordBreak: "keep-all",
   },
   buttonGroup: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: "12px",
-    marginTop: "24px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
   },
   primaryButton: {
-    gridColumn: "1 / -1",
+    width: "100%",
     border: "none",
-    background: "linear-gradient(135deg, #111827 0%, #db2777 100%)",
+    borderRadius: "22px",
+    padding: "20px 18px",
+    background: "linear-gradient(90deg, #201336 0%, #dc267f 100%)",
     color: "#ffffff",
-    borderRadius: "18px",
-    padding: "16px 18px",
-    fontSize: "16px",
-    fontWeight: 800,
+    fontSize: "18px",
+    fontWeight: 900,
     cursor: "pointer",
-    boxShadow: "0 14px 28px rgba(190, 24, 93, 0.18)",
+    boxShadow: "0 14px 30px rgba(220, 38, 127, 0.18)",
   },
+  secondaryGrid: (isMobile) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+    gap: "12px",
+  }),
   secondaryButton: {
-    border: "1px solid #d1d5db",
+    minHeight: "68px",
+    padding: "16px 14px",
+    borderRadius: "20px",
+    border: "1px solid #d7dde7",
     background: "#ffffff",
     color: "#111827",
-    borderRadius: "16px",
-    padding: "14px 16px",
-    fontSize: "14px",
-    fontWeight: 700,
+    fontSize: "17px",
+    fontWeight: 800,
     cursor: "pointer",
+    wordBreak: "keep-all",
   },
 };
 
