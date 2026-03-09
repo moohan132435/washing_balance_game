@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 
 const CANVAS_SIZE = 360;
 const REVEAL_THRESHOLD = 55;
+const LATE_SPAWN_TIMES = [13, 10, 7, 4];
+const LATE_SPAWN_BASE_CHANCE = 0.88;
 const POSSIBLE_SPOTS = [
   { id: "forehead", x: 180, y: 118, name: "이마" },
   { id: "leftCheek", x: 128, y: 192, name: "왼쪽 볼" },
@@ -28,17 +30,15 @@ function generateScenario() {
 
   const shuffled = shuffle(POSSIBLE_SPOTS);
 
-  const initialCountRoll = Math.random();
-  let initialCount = 0;
-  if (initialCountRoll < 0.25) initialCount = 0;
-  else if (initialCountRoll < 0.65) initialCount = 1;
-  else initialCount = 2;
+  const initialCount = Math.random() < 0.7 ? 2 : 1;
+  const remaining = POSSIBLE_SPOTS.length - initialCount;
 
-  const lateCountRoll = Math.random();
-  let lateCount = 0;
-  if (lateCountRoll < 0.45) lateCount = 0;
-  else if (lateCountRoll < 0.82) lateCount = 1;
-  else lateCount = 2;
+  let lateCount = 1;
+  if (remaining >= 3) {
+    lateCount = Math.random() < 0.7 ? 3 : 2;
+  } else if (remaining >= 2) {
+    lateCount = 2;
+  }
 
   const initialAcneSpots = shuffled.slice(0, initialCount).map((spot) => ({
     ...spot,
@@ -135,6 +135,7 @@ function GamePage() {
   );
   const [toolLogs, setToolLogs] = useState([]);
   const [statusMessage, setStatusMessage] = useState("얼굴 상태를 확인해보세요.");
+  const [missedSpawnCount, setMissedSpawnCount] = useState(0);
 
   const eventMap = useMemo(
     () => ({
@@ -461,28 +462,35 @@ function GamePage() {
           setHasTriggeredFiveSec(true);
         }
 
-        // 2초마다 중간 여드름 등장 판정
         if (
-          prevTime <= 12 &&
-          prevTime >= 4 &&
-          prevTime % 2 === 0 &&
-          pendingLateSpots.length > 0 &&
-          Math.random() < 0.35
+          LATE_SPAWN_TIMES.includes(prevTime) &&
+          pendingLateSpots.length > 0
         ) {
-          const nextSpot = pendingLateSpots[0];
+          const spawnChance =
+            missedSpawnCount >= 1 ? 1 : LATE_SPAWN_BASE_CHANCE;
+          const shouldSpawn = Math.random() < spawnChance;
 
-          setAcneStates((prev) => [
-            ...prev,
-            {
-              ...nextSpot,
-              revealed: !nextSpot.hiddenUnderMakeup || cleanRate >= REVEAL_THRESHOLD,
-              treated: false,
-              patched: false,
-            },
-          ]);
+          if (shouldSpawn) {
+            const nextSpot = pendingLateSpots[0];
 
-          setPendingLateSpots((prev) => prev.slice(1));
-          setStatusMessage(`${nextSpot.name} 쪽에 새로운 트러블이 올라왔어요.`);
+            setAcneStates((prev) => [
+              ...prev,
+              {
+                ...nextSpot,
+                revealed:
+                  !nextSpot.hiddenUnderMakeup ||
+                  cleanRate >= REVEAL_THRESHOLD,
+                treated: false,
+                patched: false,
+              },
+            ]);
+
+            setPendingLateSpots((prev) => prev.slice(1));
+            setMissedSpawnCount(0);
+            setStatusMessage(`${nextSpot.name} 쪽에 새로운 트러블이 올라왔어요.`);
+          } else {
+            setMissedSpawnCount((prev) => prev + 1);
+          }
         }
 
         return nextTime;
@@ -494,6 +502,7 @@ function GamePage() {
     hasTriggeredTenSec,
     hasTriggeredFiveSec,
     pendingLateSpots,
+    missedSpawnCount,
     cleanRate,
     eventMap,
   ]);
