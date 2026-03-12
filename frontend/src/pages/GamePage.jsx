@@ -7,24 +7,24 @@ const LATE_SPAWN_TIMES = [8, 6, 4, 2];
 const LATE_SPAWN_BASE_CHANCE = 0.88;
 
 const FEMALE_SPOT_PRESETS = [
-  { id: "forehead_center", x: 180, y: 150, name: "이마" },
-  { id: "left_cheek_upper", x: 132, y: 232, name: "왼쪽 볼" },
-  { id: "left_cheek_lower", x: 145, y: 260, name: "왼쪽 볼" },
-  { id: "right_cheek_upper", x: 228, y: 232, name: "오른쪽 볼" },
-  { id: "right_cheek_lower", x: 215, y: 260, name: "오른쪽 볼" },
-  { id: "nose_side_left", x: 164, y: 226, name: "코 옆" },
-  { id: "nose_side_right", x: 196, y: 226, name: "코 옆" },
+  { id: "forehead_center", x: 180, y: 180, name: "이마" },
+  { id: "left_cheek_upper", x: 138, y: 236, name: "왼쪽 볼" },
+  { id: "left_cheek_lower", x: 150, y: 268, name: "왼쪽 볼" },
+  { id: "right_cheek_upper", x: 222, y: 236, name: "오른쪽 볼" },
+  { id: "right_cheek_lower", x: 210, y: 268, name: "오른쪽 볼" },
+  { id: "nose_side_left", x: 168, y: 230, name: "코 옆" },
+  { id: "nose_side_right", x: 192, y: 230, name: "코 옆" },
   { id: "chin_center", x: 180, y: 302, name: "턱" },
 ];
 
 const MALE_SPOT_PRESETS = [
-  { id: "forehead_center", x: 180, y: 154, name: "이마" },
-  { id: "left_cheek_upper", x: 126, y: 230, name: "왼쪽 볼" },
-  { id: "left_cheek_lower", x: 142, y: 258, name: "왼쪽 볼" },
-  { id: "right_cheek_upper", x: 234, y: 230, name: "오른쪽 볼" },
-  { id: "right_cheek_lower", x: 218, y: 258, name: "오른쪽 볼" },
-  { id: "nose_side_left", x: 166, y: 224, name: "코 옆" },
-  { id: "nose_side_right", x: 194, y: 224, name: "코 옆" },
+  { id: "forehead_center", x: 180, y: 184, name: "이마" },
+  { id: "left_cheek_upper", x: 136, y: 238, name: "왼쪽 볼" },
+  { id: "left_cheek_lower", x: 148, y: 270, name: "왼쪽 볼" },
+  { id: "right_cheek_upper", x: 224, y: 238, name: "오른쪽 볼" },
+  { id: "right_cheek_lower", x: 212, y: 270, name: "오른쪽 볼" },
+  { id: "nose_side_left", x: 168, y: 232, name: "코 옆" },
+  { id: "nose_side_right", x: 192, y: 232, name: "코 옆" },
   { id: "chin_center", x: 180, y: 304, name: "턱" },
 ];
 
@@ -119,7 +119,7 @@ function getFaceConfig(gender) {
     return {
       imageSrc: "/faces/female_face_game.png",
       imageStyle: {
-        transform: "scale(2.16) translateY(24px)",
+        transform: "scale(2.24) translateY(-8px)",
         transformOrigin: "center 42%",
       },
       makeupStyle: {
@@ -135,7 +135,7 @@ function getFaceConfig(gender) {
   return {
     imageSrc: "/faces/male_face_game.png",
     imageStyle: {
-      transform: "scale(2.2) translateY(18px)",
+      transform: "scale(2.2) translateY(0px)",
       transformOrigin: "center 42%",
     },
     makeupStyle: {
@@ -986,13 +986,13 @@ const styles = {
   },
   faceGuideText: {
     position: "absolute",
-    bottom: "14px",
+    bottom: "8px",
     left: "50%",
     transform: "translateX(-50%)",
-    background: "rgba(255,255,255,0.9)",
-    padding: "8px 12px",
+    background: "rgba(255,255,255,0.88)",
+    padding: "6px 12px",
     borderRadius: "999px",
-    fontSize: "13px",
+    fontSize: "12px",
     color: "#475569",
     pointerEvents: "none",
     whiteSpace: "nowrap",
