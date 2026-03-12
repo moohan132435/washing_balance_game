@@ -132,11 +132,11 @@ function ResultPage() {
         <div style={styles.rewardPopupOverlay}>
           <div style={styles.rewardPopupCard(isMobile)}>
             <div style={styles.rewardPopupTitle}>이벤트 당첨</div>
-            <div style={styles.rewardPopupText}>90점을 넘기시다니 대단해요! 무료 세안밴드 행사 당첨!! 캡쳐하여 와디즈 ID와 함께 DM을 해주시면 본주문시 세안밴드를 무료로 드립니다.</div>
+            <div style={styles.rewardPopupText}>80점을 넘기시다니 대단해요! 무료 세안밴드 행사 당첨!! 캡쳐하여 와디즈 ID와 함께 DM을 해주시면 본주문시 세안밴드를 무료로 드립니다.</div>
             <div style={styles.rewardPopupButtons(isMobile)}>
               <button
                 style={styles.rewardPrimaryButton}
-                onClick={() => window.open("https://www.instagram.com/direct/t/17842160088619074/", "_blank", "noopener,noreferrer")}
+                onClick={() => window.open("https://ig.me/m/pgb_kr?text=안녕하세요%20문의드립니다.", "_blank", "noopener,noreferrer")}
               >
                 세안밴드 받기
               </button>
