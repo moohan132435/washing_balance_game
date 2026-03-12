@@ -158,8 +158,8 @@ function GamePage() {
 
   const faceImageSrc =
     scenario.gender === "female"
-      ? "/faces/female_face_base_1.svg"
-      : "/faces/male_face_base_1.svg";
+      ? "/faces/female_face_game.png"
+      : "/faces/male_face_game.png";
 
   const coachingMessage = useMemo(() => {
     if (selectedTool === "ointment") {
@@ -916,6 +916,7 @@ const styles = {
     width: "100%",
     height: "100%",
     objectFit: "contain",
+    objectPosition: "center center",
     pointerEvents: "none",
   },
   makeupOverlay: {

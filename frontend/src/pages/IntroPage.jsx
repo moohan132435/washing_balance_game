@@ -25,7 +25,7 @@ function IntroPage() {
   return (
     <div style={styles.wrapper}>
       <div style={styles.card}>
-        <h1 style={styles.title}>15초 피부 케어 게임</h1>
+        <h1 style={styles.title}>10초 피부 케어 게임</h1>
         <p style={styles.subtitle}>
           얼굴 상태를 확인하고,
           <br />

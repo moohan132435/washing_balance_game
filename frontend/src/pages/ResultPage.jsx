@@ -38,6 +38,7 @@ function ResultPage() {
   const [saveStatus, setSaveStatus] = useState("idle");
   const [saveMessage, setSaveMessage] = useState("");
   const [saved, setSaved] = useState(false);
+  const [showRewardPopup, setShowRewardPopup] = useState(false);
   const [screenWidth, setScreenWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 390
   );
@@ -52,6 +53,10 @@ function ResultPage() {
   const isNarrow = screenWidth <= 430;
 
   const result = location.state || FALLBACK_RESULT;
+
+  useEffect(() => {
+    setShowRewardPopup((result.score || 0) >= 90);
+  }, [result.score]);
 
   const payload = useMemo(
     () => ({
@@ -119,6 +124,25 @@ function ResultPage() {
 
   return (
     <div style={styles.wrapper}>
+      {showRewardPopup ? (
+        <div style={styles.rewardPopupOverlay}>
+          <div style={styles.rewardPopupCard(isMobile)}>
+            <div style={styles.rewardPopupTitle}>이벤트 당첨</div>
+            <div style={styles.rewardPopupText}>90점을 넘기시다니 대단해요! 무료 세안밴드 행사 당첨!! 캡쳐하여 와디즈 ID와 함께 DM을 해주시면 본주문시 세안밴드를 무료로 드립니다.</div>
+            <div style={styles.rewardPopupButtons(isMobile)}>
+              <button
+                style={styles.rewardPrimaryButton}
+                onClick={() => window.open("https://www.instagram.com/direct/t/17842160088619074/", "_blank", "noopener,noreferrer")}
+              >
+                세안밴드 받기
+              </button>
+              <button style={styles.rewardSecondaryButton} onClick={() => setShowRewardPopup(false)}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div style={styles.card(isMobile)}>
         <div style={styles.hero(isMobile)}>
           <div style={styles.heroTop(isMobile)}>
@@ -136,7 +160,6 @@ function ResultPage() {
           </div>
 
           <div style={styles.summaryChips(isMobile)}>
-            <div style={styles.summaryChip}>닉네임 {result.nickname}</div>
             {result.scenarioSummary ? (
               <div style={styles.summaryChipMuted}>{result.scenarioSummary}</div>
             ) : null}
@@ -494,6 +517,63 @@ const styles = {
     color: "#7c2d12",
     fontSize: "14px",
     fontWeight: 700,
+  },
+  rewardPopupOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.52)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "20px",
+    zIndex: 1000,
+    boxSizing: "border-box",
+  },
+  rewardPopupCard: (isMobile) => ({
+    width: "100%",
+    maxWidth: isMobile ? "360px" : "420px",
+    background: "#ffffff",
+    borderRadius: "24px",
+    padding: isMobile ? "22px 18px" : "26px 22px",
+    boxShadow: "0 20px 48px rgba(15, 23, 42, 0.22)",
+  }),
+  rewardPopupTitle: {
+    fontSize: "22px",
+    fontWeight: 900,
+    color: "#0f172a",
+    marginBottom: "10px",
+  },
+  rewardPopupText: {
+    color: "#334155",
+    fontSize: "16px",
+    lineHeight: 1.7,
+    wordBreak: "keep-all",
+  },
+  rewardPopupButtons: (isMobile) => ({
+    display: "grid",
+    gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+    gap: "10px",
+    marginTop: "18px",
+  }),
+  rewardPrimaryButton: {
+    border: "none",
+    borderRadius: "16px",
+    padding: "15px 16px",
+    background: "linear-gradient(90deg, #1f3a8a 0%, #2563eb 100%)",
+    color: "#ffffff",
+    fontSize: "16px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  rewardSecondaryButton: {
+    border: "1px solid #d7dde7",
+    borderRadius: "16px",
+    padding: "15px 16px",
+    background: "#ffffff",
+    color: "#111827",
+    fontSize: "16px",
+    fontWeight: 800,
+    cursor: "pointer",
   },
   summaryChips: (isMobile) => ({
     marginTop: "16px",
