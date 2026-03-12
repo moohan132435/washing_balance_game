@@ -26,11 +26,11 @@ function IntroPage() {
     <div style={styles.wrapper}>
       <div style={styles.card}>
         <h1 style={styles.title}>10초 피부 케어 게임</h1>
-        <p style={styles.subtitle}>
+        {/* <p style={styles.subtitle}>
           얼굴 상태를 확인하고,
           <br />
           세정 → 연고 → 패치 순서로 균형 있게 마무리하세요.
-        </p>
+        </p> */}
 
         <div style={styles.guideBox}>
           <p style={styles.guideTitle}>플레이 방법</p>

@@ -156,10 +156,38 @@ function GamePage() {
   const treatedCount = acneStates.filter((spot) => spot.treated).length;
   const patchedCount = acneStates.filter((spot) => spot.patched).length;
 
-  const faceImageSrc =
+  const faceConfig =
     scenario.gender === "female"
-      ? "/faces/female_face_game.png"
-      : "/faces/male_face_game.png";
+      ? {
+          imageSrc: "/faces/female_face_game.png",
+          imageStyle: {
+            transform: "scale(2.08) translateY(22px)",
+            transformOrigin: "center 42%",
+          },
+          makeupStyle: {
+            left: "84px",
+            top: "72px",
+            width: "194px",
+            height: "230px",
+            borderRadius: "42% 42% 44% 44% / 38% 38% 50% 50%",
+          },
+        }
+      : {
+          imageSrc: "/faces/male_face_game.png",
+          imageStyle: {
+            transform: "scale(2.16) translateY(16px)",
+            transformOrigin: "center 42%",
+          },
+          makeupStyle: {
+            left: "82px",
+            top: "74px",
+            width: "196px",
+            height: "224px",
+            borderRadius: "44% 44% 42% 42% / 38% 38% 48% 48%",
+          },
+        };
+
+  const faceImageSrc = faceConfig.imageSrc;
 
   const coachingMessage = useMemo(() => {
     if (selectedTool === "ointment") {
@@ -221,9 +249,9 @@ function GamePage() {
       ctx.globalAlpha = bubble.alpha;
       ctx.beginPath();
       ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = "rgba(181, 205, 142, 0.88)";
       ctx.fill();
-      ctx.strokeStyle = "#dbeafe";
+      ctx.strokeStyle = "rgba(139, 169, 94, 0.9)";
       ctx.lineWidth = 1;
       ctx.stroke();
     });
@@ -687,7 +715,7 @@ function GamePage() {
             <img
               src={faceImageSrc}
               alt="face"
-              style={styles.faceImage}
+              style={{ ...styles.faceImage, ...faceConfig.imageStyle }}
               draggable={false}
             />
 
@@ -695,6 +723,7 @@ function GamePage() {
               <div
                 style={{
                   ...styles.makeupOverlay,
+                  ...faceConfig.makeupStyle,
                   opacity: Math.max(0, (100 - cleanRate) / 100) * 0.38,
                 }}
               />
@@ -918,6 +947,7 @@ const styles = {
     objectFit: "contain",
     objectPosition: "center center",
     pointerEvents: "none",
+    willChange: "transform",
   },
   makeupOverlay: {
     position: "absolute",
