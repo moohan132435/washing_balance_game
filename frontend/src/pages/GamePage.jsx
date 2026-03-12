@@ -686,10 +686,10 @@ function GamePage() {
   return (
     <div style={styles.wrapper}>
       <div style={styles.topBar}>
-        <div style={styles.topCard}>
+        {/* <div style={styles.topCard}>
           <div style={styles.topLabel}>플레이어</div>
           <div style={styles.topValue}>{nickname}</div>
-        </div>
+        </div> */}
         <div style={styles.topCard}>
           <div style={styles.topLabel}>남은 시간</div>
           <div style={styles.topValue}>{timeLeft}초</div>
