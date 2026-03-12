@@ -249,7 +249,15 @@ function ResultPage() {
 
           <div style={styles.secondaryGrid(isMobile)}>
             <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>랭킹 보기</button>
-            <button style={styles.secondaryButton} onClick={() => navigate("/game")}>다시하기</button>
+            <button
+              style={styles.secondaryButton}
+              onClick={() => {
+                window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                navigate("/game");
+              }}
+            >
+              다시하기
+            </button>
             <button style={styles.secondaryButton} onClick={() => navigate("/")}>처음으로</button>
             {saveStatus === "error" ? (
               <button style={styles.secondaryButton} onClick={handleRetrySave}>저장 재시도</button>

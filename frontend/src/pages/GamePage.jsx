@@ -283,6 +283,10 @@ function GamePage() {
   }, []);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
+
+  useEffect(() => {
     drawCanvas();
   }, [drawCanvas, acneStates, cleanRate, irritation, moisture]);
 
