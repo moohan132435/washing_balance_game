@@ -36,9 +36,11 @@ function ResultPage() {
   const navigate = useNavigate();
 
   const [saveStatus, setSaveStatus] = useState("idle");
-  const [saveMessage, setSaveMessage] = useState("");
+  const [, setSaveMessage] = useState("");
   const [saved, setSaved] = useState(false);
-  const [showRewardPopup, setShowRewardPopup] = useState(false);
+  // const [showRewardPopup, setShowRewardPopup] = useState(false);
+  const [rewardPopupDismissed, setRewardPopupDismissed] = useState(false);
+  // const showRewardPopup = (result.score || 0) >= 90;
   const [screenWidth, setScreenWidth] = useState(
     typeof window !== "undefined" ? window.innerWidth : 390
   );
@@ -50,13 +52,15 @@ function ResultPage() {
   }, []);
 
   const isMobile = screenWidth <= 768;
-  const isNarrow = screenWidth <= 430;
+  // const isNarrow = screenWidth <= 430;
 
   const result = location.state || FALLBACK_RESULT;
 
-  useEffect(() => {
-    setShowRewardPopup((result.score || 0) >= 90);
-  }, [result.score]);
+  // useEffect(() => {
+  //   setShowRewardPopup((result.score || 0) >= 90);
+  // }, [result.score]);
+
+  const showRewardPopup = (result.score || 0) >= 90 && !rewardPopupDismissed;
 
   const payload = useMemo(
     () => ({
@@ -136,7 +140,13 @@ function ResultPage() {
               >
                 세안밴드 받기
               </button>
-              <button style={styles.rewardSecondaryButton} onClick={() => setShowRewardPopup(false)}>
+              {/* <button style={styles.rewardSecondaryButton} onClick={() => setShowRewardPopup(false)}>
+                닫기
+              </button> */}
+              <button
+                style={styles.rewardSecondaryButton}
+                onClick={() => setRewardPopupDismissed(true)}
+              >
                 닫기
               </button>
             </div>
@@ -166,13 +176,13 @@ function ResultPage() {
           </div>
         </div>
 
-        <div style={styles.saveBox(saveStatus)}>
+        {/* <div style={styles.saveBox(saveStatus)}>
           <div style={styles.sectionEyebrow}>랭킹 저장 상태</div>
           <div style={styles.saveMessage(saveStatus)}>{saveMessage || "저장 대기중"}</div>
           <div style={styles.apiInfo}>{API_BASE_URL || "VITE_API_BASE_URL이 비어 있습니다."}</div>
-        </div>
+        </div> */}
 
-        <div style={styles.statGrid(isNarrow)}>
+        {/* <div style={styles.statGrid(isNarrow)}>
           <StatCard label="세정 진행도" value={Math.round(result.cleanRate || 0)} suffix="" />
           <StatCard label="자극" value={Math.round(result.irritation || 0)} suffix="" />
           <StatCard label="수분" value={Math.round(result.moisture || 0)} suffix="" />
@@ -181,13 +191,13 @@ function ResultPage() {
             value={Number(result.balanceTime || 0).toFixed(1)}
             suffix="초"
           />
-        </div>
+        </div> */}
 
-        <div style={styles.reasonBox}>
+        {/* <div style={styles.reasonBox}>
           <div style={styles.sectionEyebrow}>이 결과가 재밌는 이유</div>
           <h2 style={styles.reasonTitle(isMobile)}>{getReasonTitle(result, scoreBreakdown)}</h2>
           <p style={styles.reasonDescription}>{getReasonDescription(result, scoreBreakdown)}</p>
-        </div>
+        </div> */}
 
         <div style={styles.twoColumn(isMobile)}>
           <ListCard title="잘한 포인트" tone="good" items={topStrengths} />
@@ -195,10 +205,10 @@ function ResultPage() {
         </div>
 
         <div style={styles.wadizBox}>
-          <div style={styles.sectionEyebrowAccent}>와디즈에서 이어서 볼 포인트</div>
-          <p style={styles.wadizDescription}>
+          <div style={styles.sectionEyebrowAccent}>이어서 볼 포인트</div>
+          {/* <p style={styles.wadizDescription}>
             게임에서 궁금해진 포인트를 실제 제품/상세페이지에서 이어보게 만드는 영역이에요.
-          </p>
+          </p> */}
 
           <div style={styles.wadizList}>
             {wadizPoints.map((item, index) => (
@@ -210,7 +220,7 @@ function ResultPage() {
           </div>
         </div>
 
-        <div style={styles.twoColumn(isMobile)}>
+        {/* <div style={styles.twoColumn(isMobile)}>
           <DetailBox title="점수 구성">
             <DetailRow label="세정 점수" value={scoreBreakdown.cleaningScore ?? 0} />
             <DetailRow label="자극 관리 점수" value={scoreBreakdown.irritationScore ?? 0} />
@@ -225,7 +235,7 @@ function ResultPage() {
             <DetailRow label="연고 처리 수" value={careStats.treatedCount ?? 0} />
             <DetailRow label="패치 부착 수" value={careStats.patchedCount ?? 0} />
           </DetailBox>
-        </div>
+        </div> */}
 
         <div style={styles.missionBox}>
           <div style={styles.sectionEyebrowBlue}>다음 미션</div>
@@ -306,37 +316,37 @@ function getScoreComment(score) {
   return "다음 판에서 반등 가능";
 }
 
-function getReasonTitle(result, breakdown) {
-  if ((result.cleanRate || 0) >= 90 && (result.irritation || 0) >= 75) {
-    return "왜 많이 씻을수록 오히려 아쉬운 결과가 나왔을까요?";
-  }
+// function getReasonTitle(result, breakdown) {
+//   if ((result.cleanRate || 0) >= 90 && (result.irritation || 0) >= 75) {
+//     return "왜 많이 씻을수록 오히려 아쉬운 결과가 나왔을까요?";
+//   }
 
-  if ((breakdown.careOrderScore || 0) <= 8) {
-    return "여드름을 발견해도 순서가 꼬이면 점수가 왜 떨어질까요?";
-  }
+//   if ((breakdown.careOrderScore || 0) <= 8) {
+//     return "여드름을 발견해도 순서가 꼬이면 점수가 왜 떨어질까요?";
+//   }
 
-  if ((result.moisture || 0) <= 25) {
-    return "깨끗해 보여도 마무리가 건조하면 왜 아쉬울까요?";
-  }
+//   if ((result.moisture || 0) <= 25) {
+//     return "깨끗해 보여도 마무리가 건조하면 왜 아쉬울까요?";
+//   }
 
-  return "점수는 괜찮았는데 왜 더 높은 등급이 안 나왔을까요?";
-}
+//   return "점수는 괜찮았는데 왜 더 높은 등급이 안 나왔을까요?";
+// }
 
-function getReasonDescription(result, breakdown) {
-  if ((result.cleanRate || 0) >= 90 && (result.irritation || 0) >= 75) {
-    return "과세정 없이 쫀쫀하게 관리하는 포인트를 와디즈에서 확인해보세요.";
-  }
+// function getReasonDescription(result, breakdown) {
+//   if ((result.cleanRate || 0) >= 90 && (result.irritation || 0) >= 75) {
+//     return "과세정 없이 쫀쫀하게 관리하는 포인트를 와디즈에서 확인해보세요.";
+//   }
 
-  if ((breakdown.careOrderScore || 0) <= 8) {
-    return "세안 후 연고와 패치를 어떤 순서로 이어야 덜 자극적인지 상세페이지에서 자연스럽게 이어볼 수 있어요.";
-  }
+//   if ((breakdown.careOrderScore || 0) <= 8) {
+//     return "세안 후 연고와 패치를 어떤 순서로 이어야 덜 자극적인지 상세페이지에서 자연스럽게 이어볼 수 있어요.";
+//   }
 
-  if ((result.moisture || 0) <= 25) {
-    return "세안 직후 당김을 줄이고 마무리감을 높이는 포인트가 다음 클릭 이유가 되게 구성했어요.";
-  }
+//   if ((result.moisture || 0) <= 25) {
+//     return "세안 직후 당김을 줄이고 마무리감을 높이는 포인트가 다음 클릭 이유가 되게 구성했어요.";
+//   }
 
-  return "결과에서 생긴 궁금증이 실제 제품 이해로 이어지도록 문구 흐름을 설계했어요.";
-}
+//   return "결과에서 생긴 궁금증이 실제 제품 이해로 이어지도록 문구 흐름을 설계했어요.";
+// }
 
 function getStrengths(result, breakdown, careStats) {
   const items = [];
@@ -650,12 +660,12 @@ const styles = {
     fontSize: "13px",
     wordBreak: "break-all",
   },
-  statGrid: (isNarrow) => ({
-    display: "grid",
-    gridTemplateColumns: isNarrow ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
-    gap: "12px",
-    marginBottom: "16px",
-  }),
+  // statGrid: (isNarrow) => ({
+  //   display: "grid",
+  //   gridTemplateColumns: isNarrow ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))",
+  //   gap: "12px",
+  //   marginBottom: "16px",
+  // }),
   statCard: {
     background: "#ffffff",
     border: "1px solid #e5e7eb",
