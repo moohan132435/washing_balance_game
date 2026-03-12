@@ -60,7 +60,7 @@ function ResultPage() {
   //   setShowRewardPopup((result.score || 0) >= 90);
   // }, [result.score]);
 
-  const showRewardPopup = (result.score || 0) >= 90 && !rewardPopupDismissed;
+  const showRewardPopup = (result.score || 0) >= 80 && !rewardPopupDismissed;
 
   const payload = useMemo(
     () => ({
@@ -318,7 +318,7 @@ function DetailRow({ label, value }) {
 }
 
 function getScoreComment(score) {
-  if (score >= 90) return "거의 프로 루틴";
+  if (score >= 85) return "거의 프로 루틴";
   if (score >= 75) return "흐름이 꽤 좋았어요";
   if (score >= 60) return "조금만 다듬으면 더 좋아져요";
   return "다음 판에서 반등 가능";

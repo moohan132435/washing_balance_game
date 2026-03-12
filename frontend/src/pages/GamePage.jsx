@@ -83,7 +83,7 @@ function generateScenario() {
 }
 
 function getGrade(score) {
-  if (score >= 90) return "피부 응급처치 마스터";
+  if (score >= 80) return "피부 응급처치 마스터";
   if (score >= 75) return "밸런스 케어 고수";
   if (score >= 60) return "과몰입 클렌저형";
   if (score >= 40) return "순서 꼬임 케어형";
