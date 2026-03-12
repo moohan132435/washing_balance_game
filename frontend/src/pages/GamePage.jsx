@@ -3,14 +3,29 @@ import { useNavigate } from "react-router-dom";
 
 const CANVAS_SIZE = 360;
 const REVEAL_THRESHOLD = 55;
-const LATE_SPAWN_TIMES = [13, 10, 7, 4];
+const LATE_SPAWN_TIMES = [8, 6, 4, 2];
 const LATE_SPAWN_BASE_CHANCE = 0.88;
-const POSSIBLE_SPOTS = [
-  { id: "forehead", x: 180, y: 118, name: "이마" },
-  { id: "leftCheek", x: 128, y: 192, name: "왼쪽 볼" },
-  { id: "rightCheek", x: 232, y: 192, name: "오른쪽 볼" },
-  { id: "chin", x: 180, y: 255, name: "턱" },
-  { id: "noseSide", x: 160, y: 180, name: "코 옆" },
+
+const FEMALE_SPOT_PRESETS = [
+  { id: "forehead_center", x: 180, y: 150, name: "이마" },
+  { id: "left_cheek_upper", x: 132, y: 232, name: "왼쪽 볼" },
+  { id: "left_cheek_lower", x: 145, y: 260, name: "왼쪽 볼" },
+  { id: "right_cheek_upper", x: 228, y: 232, name: "오른쪽 볼" },
+  { id: "right_cheek_lower", x: 215, y: 260, name: "오른쪽 볼" },
+  { id: "nose_side_left", x: 164, y: 226, name: "코 옆" },
+  { id: "nose_side_right", x: 196, y: 226, name: "코 옆" },
+  { id: "chin_center", x: 180, y: 302, name: "턱" },
+];
+
+const MALE_SPOT_PRESETS = [
+  { id: "forehead_center", x: 180, y: 154, name: "이마" },
+  { id: "left_cheek_upper", x: 126, y: 230, name: "왼쪽 볼" },
+  { id: "left_cheek_lower", x: 142, y: 258, name: "왼쪽 볼" },
+  { id: "right_cheek_upper", x: 234, y: 230, name: "오른쪽 볼" },
+  { id: "right_cheek_lower", x: 218, y: 258, name: "오른쪽 볼" },
+  { id: "nose_side_left", x: 166, y: 224, name: "코 옆" },
+  { id: "nose_side_right", x: 194, y: 224, name: "코 옆" },
+  { id: "chin_center", x: 180, y: 304, name: "턱" },
 ];
 
 function shuffle(array) {
@@ -21,6 +36,10 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function getSpotPoolByGender(gender) {
+  return gender === "female" ? FEMALE_SPOT_PRESETS : MALE_SPOT_PRESETS;
+}
+
 function generateScenario() {
   const gender = Math.random() < 0.5 ? "male" : "female";
   const skinTypes = ["dry", "oily", "sensitive", "normal"];
@@ -28,10 +47,10 @@ function generateScenario() {
   const hasMakeup =
     gender === "female" ? Math.random() < 0.75 : Math.random() < 0.15;
 
-  const shuffled = shuffle(POSSIBLE_SPOTS);
+  const spotPool = shuffle(getSpotPoolByGender(gender));
 
   const initialCount = Math.random() < 0.7 ? 2 : 1;
-  const remaining = POSSIBLE_SPOTS.length - initialCount;
+  const remaining = spotPool.length - initialCount;
 
   let lateCount = 1;
   if (remaining >= 3) {
@@ -40,13 +59,13 @@ function generateScenario() {
     lateCount = 2;
   }
 
-  const initialAcneSpots = shuffled.slice(0, initialCount).map((spot) => ({
+  const initialAcneSpots = spotPool.slice(0, initialCount).map((spot) => ({
     ...spot,
     hiddenUnderMakeup: hasMakeup,
     source: "initial",
   }));
 
-  const lateAcneSpots = shuffled
+  const lateAcneSpots = spotPool
     .slice(initialCount, initialCount + lateCount)
     .map((spot) => ({
       ...spot,
@@ -95,6 +114,40 @@ function getCtaText(grade) {
   return "보호까지 생각한 케어 방식 보기";
 }
 
+function getFaceConfig(gender) {
+  if (gender === "female") {
+    return {
+      imageSrc: "/faces/female_face_game.png",
+      imageStyle: {
+        transform: "scale(2.16) translateY(24px)",
+        transformOrigin: "center 42%",
+      },
+      makeupStyle: {
+        left: "94px",
+        top: "118px",
+        width: "172px",
+        height: "208px",
+        borderRadius: "42% 42% 46% 46% / 36% 36% 52% 52%",
+      },
+    };
+  }
+
+  return {
+    imageSrc: "/faces/male_face_game.png",
+    imageStyle: {
+      transform: "scale(2.2) translateY(18px)",
+      transformOrigin: "center 42%",
+    },
+    makeupStyle: {
+      left: "92px",
+      top: "116px",
+      width: "176px",
+      height: "206px",
+      borderRadius: "42% 42% 44% 44% / 35% 35% 50% 50%",
+    },
+  };
+}
+
 function GamePage() {
   const navigate = useNavigate();
   const canvasRef = useRef(null);
@@ -102,6 +155,7 @@ function GamePage() {
   const nickname = localStorage.getItem("nickname") || "PLAYER";
 
   const scenario = useMemo(() => generateScenario(), []);
+  const faceConfig = useMemo(() => getFaceConfig(scenario.gender), [scenario.gender]);
 
   const initialAcneState = useMemo(
     () =>
@@ -114,7 +168,7 @@ function GamePage() {
     [scenario]
   );
 
-  const [timeLeft, setTimeLeft] = useState(15);
+  const [timeLeft, setTimeLeft] = useState(10);
   const [cleanRate, setCleanRate] = useState(0);
   const [irritation, setIrritation] = useState(
     scenario.skinType === "sensitive" ? 18 : 10
@@ -127,8 +181,8 @@ function GamePage() {
   const [eventType, setEventType] = useState("");
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [selectedTool, setSelectedTool] = useState(null);
-  const [hasTriggeredTenSec, setHasTriggeredTenSec] = useState(false);
-  const [hasTriggeredFiveSec, setHasTriggeredFiveSec] = useState(false);
+  const [hasTriggeredMidEvent, setHasTriggeredMidEvent] = useState(false);
+  const [hasTriggeredLateEvent, setHasTriggeredLateEvent] = useState(false);
   const [acneStates, setAcneStates] = useState(initialAcneState);
   const [pendingLateSpots, setPendingLateSpots] = useState(
     scenario.lateAcneSpots
@@ -155,39 +209,6 @@ function GamePage() {
   const visibleAcneCount = acneStates.filter((spot) => spot.revealed).length;
   const treatedCount = acneStates.filter((spot) => spot.treated).length;
   const patchedCount = acneStates.filter((spot) => spot.patched).length;
-
-  const faceConfig =
-    scenario.gender === "female"
-      ? {
-          imageSrc: "/faces/female_face_game.png",
-          imageStyle: {
-            transform: "scale(2.08) translateY(22px)",
-            transformOrigin: "center 42%",
-          },
-          makeupStyle: {
-            left: "84px",
-            top: "72px",
-            width: "194px",
-            height: "230px",
-            borderRadius: "42% 42% 44% 44% / 38% 38% 50% 50%",
-          },
-        }
-      : {
-          imageSrc: "/faces/male_face_game.png",
-          imageStyle: {
-            transform: "scale(2.16) translateY(16px)",
-            transformOrigin: "center 42%",
-          },
-          makeupStyle: {
-            left: "82px",
-            top: "74px",
-            width: "196px",
-            height: "224px",
-            borderRadius: "44% 44% 42% 42% / 38% 38% 48% 48%",
-          },
-        };
-
-  const faceImageSrc = faceConfig.imageSrc;
 
   const coachingMessage = useMemo(() => {
     if (selectedTool === "ointment") {
@@ -243,15 +264,17 @@ function GamePage() {
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     bubblePointsRef.current.forEach((bubble) => {
       ctx.globalAlpha = bubble.alpha;
       ctx.beginPath();
       ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(181, 205, 142, 0.88)";
+      ctx.fillStyle = "rgba(181, 205, 142, 0.92)";
       ctx.fill();
-      ctx.strokeStyle = "rgba(139, 169, 94, 0.9)";
+      ctx.strokeStyle = "rgba(139, 169, 94, 0.95)";
       ctx.lineWidth = 1;
       ctx.stroke();
     });
@@ -405,7 +428,7 @@ function GamePage() {
       }
     });
 
-    if (!nearest || nearestDistance > 35) {
+    if (!nearest || nearestDistance > 38) {
       const wrongToolName = selectedTool === "ointment" ? "연고" : "패치";
 
       setStatusMessage(
@@ -474,26 +497,23 @@ function GamePage() {
       setTimeLeft((prevTime) => {
         const nextTime = prevTime <= 1 ? 0 : prevTime - 1;
 
-        if (prevTime === 11 && !hasTriggeredTenSec) {
+        if (prevTime === 8 && !hasTriggeredMidEvent) {
           const keys = Object.keys(eventMap);
           const randomKey = keys[Math.floor(Math.random() * keys.length)];
           setEventType(randomKey);
           setCurrentEvent(eventMap[randomKey].label);
-          setHasTriggeredTenSec(true);
+          setHasTriggeredMidEvent(true);
         }
 
-        if (prevTime === 6 && !hasTriggeredFiveSec) {
+        if (prevTime === 4 && !hasTriggeredLateEvent) {
           const keys = Object.keys(eventMap);
           const randomKey = keys[Math.floor(Math.random() * keys.length)];
           setEventType(randomKey);
           setCurrentEvent(eventMap[randomKey].label);
-          setHasTriggeredFiveSec(true);
+          setHasTriggeredLateEvent(true);
         }
 
-        if (
-          LATE_SPAWN_TIMES.includes(prevTime) &&
-          pendingLateSpots.length > 0
-        ) {
+        if (LATE_SPAWN_TIMES.includes(prevTime) && pendingLateSpots.length > 0) {
           const spawnChance =
             missedSpawnCount >= 1 ? 1 : LATE_SPAWN_BASE_CHANCE;
           const shouldSpawn = Math.random() < spawnChance;
@@ -527,8 +547,8 @@ function GamePage() {
 
     return () => clearInterval(timer);
   }, [
-    hasTriggeredTenSec,
-    hasTriggeredFiveSec,
+    hasTriggeredMidEvent,
+    hasTriggeredLateEvent,
     pendingLateSpots,
     missedSpawnCount,
     cleanRate,
@@ -685,18 +705,7 @@ function GamePage() {
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.topBar}>
-        {/* <div style={styles.topCard}>
-          <div style={styles.topLabel}>플레이어</div>
-          <div style={styles.topValue}>{nickname}</div>
-        </div> */}
-        <div style={styles.topCard}>
-          <div style={styles.topLabel}>남은 시간</div>
-          <div style={styles.topValue}>{timeLeft}초</div>
-        </div>
-      </div>
-
-      <h1 style={styles.title}>15초 피부 케어 게임</h1>
+      <h1 style={styles.title}>10초 피부 케어 게임</h1>
 
       <div style={styles.mainArea}>
         <div style={styles.leftPanel}>
@@ -712,8 +721,10 @@ function GamePage() {
             onTouchCancel={handleScrubEnd}
             onTouchMove={handleTouchMove}
           >
+            <div style={styles.timerBadge}>남은 시간 {timeLeft}초</div>
+
             <img
-              src={faceImageSrc}
+              src={faceConfig.imageSrc}
               alt="face"
               style={{ ...styles.faceImage, ...faceConfig.imageStyle }}
               draggable={false}
@@ -743,7 +754,7 @@ function GamePage() {
                   style={{
                     ...styles.spot,
                     left: `${spot.x - (spot.patched ? 13 : 10)}px`,
-                    top: `${spot.y - (spot.patched ? 10 : 10)}px`,
+                    top: `${spot.y - 10}px`,
                     background: spot.patched
                       ? "#f7d7a8"
                       : spot.treated
@@ -777,14 +788,8 @@ function GamePage() {
             />
 
             <div style={styles.faceGuideText}>
-              {selectedTool ? toolDescription : "마우스로 문질러 세정해보세요"}
+              {selectedTool ? toolDescription : "마우스 또는 손가락으로 문질러 세정해보세요"}
             </div>
-          </div>
-
-          <div style={styles.feedbackBox}>
-            <div style={styles.feedbackTitle}>실시간 코칭</div>
-            <div style={styles.feedbackPrimary}>{coachingMessage}</div>
-            <div style={styles.feedbackSecondary}>{statusMessage}</div>
           </div>
 
           <div style={styles.toolBar}>
@@ -811,11 +816,20 @@ function GamePage() {
               패치
             </button>
             <button
-              style={styles.toolButtonSecondary}
+              style={{
+                ...styles.toolButtonSecondary,
+                ...(!selectedTool ? styles.toolButtonSecondaryActive : {}),
+              }}
               onClick={() => setSelectedTool(null)}
             >
               손으로 세정
             </button>
+          </div>
+
+          <div style={styles.feedbackBox}>
+            <div style={styles.feedbackTitle}>실시간 코칭</div>
+            <div style={styles.feedbackPrimary}>{coachingMessage}</div>
+            <div style={styles.feedbackSecondary}>{statusMessage}</div>
           </div>
 
           <div style={styles.playGuideBox}>
@@ -881,51 +895,27 @@ const styles = {
   wrapper: {
     minHeight: "100vh",
     background: "linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%)",
-    padding: "20px",
+    padding: "14px 14px 24px",
     boxSizing: "border-box",
-  },
-  topBar: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "16px",
-    flexWrap: "wrap",
-    marginBottom: "16px",
-  },
-  topCard: {
-    minWidth: "160px",
-    background: "#ffffff",
-    borderRadius: "16px",
-    padding: "14px 18px",
-    boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
-    textAlign: "center",
-  },
-  topLabel: {
-    fontSize: "13px",
-    color: "#64748b",
-    marginBottom: "4px",
-  },
-  topValue: {
-    fontSize: "22px",
-    fontWeight: "800",
-    color: "#111827",
   },
   title: {
     textAlign: "center",
     fontSize: "34px",
-    margin: "10px 0 24px 0",
+    margin: "4px 0 18px 0",
     color: "#1f2937",
+    fontWeight: 800,
   },
   mainArea: {
     display: "flex",
     justifyContent: "center",
     alignItems: "flex-start",
-    gap: "24px",
+    gap: "20px",
     flexWrap: "wrap",
   },
   leftPanel: {
     display: "flex",
     flexDirection: "column",
-    gap: "14px",
+    gap: "12px",
   },
   faceArea: {
     width: "360px",
@@ -939,6 +929,21 @@ const styles = {
     userSelect: "none",
     cursor: "pointer",
   },
+  timerBadge: {
+    position: "absolute",
+    top: "12px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 10,
+    background: "rgba(255,255,255,0.94)",
+    padding: "8px 14px",
+    borderRadius: "999px",
+    fontSize: "14px",
+    fontWeight: 800,
+    color: "#1f2937",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
+    whiteSpace: "nowrap",
+  },
   faceImage: {
     position: "absolute",
     inset: 0,
@@ -947,24 +952,20 @@ const styles = {
     objectFit: "contain",
     objectPosition: "center center",
     pointerEvents: "none",
-    willChange: "transform",
   },
   makeupOverlay: {
     position: "absolute",
-    left: "72px",
-    top: "46px",
-    width: "216px",
-    height: "280px",
-    borderRadius: "45% 45% 42% 42% / 42% 42% 48% 48%",
     background: "#f3cdc7",
     pointerEvents: "none",
+    zIndex: 1,
   },
   rednessOverlay: {
     position: "absolute",
     inset: 0,
     pointerEvents: "none",
     background:
-      "radial-gradient(circle at 34% 56%, rgba(255,120,120,0.9) 0 9%, transparent 10%), radial-gradient(circle at 66% 56%, rgba(255,120,120,0.9) 0 9%, transparent 10%)",
+      "radial-gradient(circle at 34% 66%, rgba(255,120,120,0.82) 0 7%, transparent 8%), radial-gradient(circle at 66% 66%, rgba(255,120,120,0.82) 0 7%, transparent 8%)",
+    zIndex: 2,
   },
   spot: {
     position: "absolute",
@@ -972,6 +973,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     pointerEvents: "none",
+    zIndex: 4,
   },
   canvasOverlay: {
     position: "absolute",
@@ -980,19 +982,54 @@ const styles = {
     height: "100%",
     display: "block",
     pointerEvents: "none",
+    zIndex: 5,
   },
   faceGuideText: {
     position: "absolute",
     bottom: "14px",
     left: "50%",
     transform: "translateX(-50%)",
-    background: "rgba(255,255,255,0.88)",
+    background: "rgba(255,255,255,0.9)",
     padding: "8px 12px",
     borderRadius: "999px",
     fontSize: "13px",
     color: "#475569",
     pointerEvents: "none",
     whiteSpace: "nowrap",
+    zIndex: 6,
+  },
+  toolBar: {
+    width: "360px",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: "10px",
+  },
+  toolButton: {
+    height: "54px",
+    border: "none",
+    borderRadius: "16px",
+    background: "#0f172a",
+    color: "#ffffff",
+    fontWeight: 800,
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+  toolButtonActive: {
+    background: "#2563eb",
+  },
+  toolButtonSecondary: {
+    height: "54px",
+    border: "1px solid #cbd5e1",
+    borderRadius: "16px",
+    background: "#ffffff",
+    color: "#111827",
+    fontWeight: 800,
+    fontSize: "15px",
+    cursor: "pointer",
+  },
+  toolButtonSecondaryActive: {
+    background: "#eef2ff",
+    border: "1px solid #c7d2fe",
   },
   feedbackBox: {
     width: "360px",
@@ -1017,37 +1054,6 @@ const styles = {
     color: "#64748b",
     lineHeight: "1.5",
     fontSize: "14px",
-  },
-  toolBar: {
-    width: "360px",
-    display: "flex",
-    gap: "10px",
-    flexWrap: "wrap",
-  },
-  toolButton: {
-    flex: 1,
-    minWidth: "100px",
-    padding: "12px 14px",
-    border: "none",
-    borderRadius: "14px",
-    background: "#111827",
-    color: "#ffffff",
-    fontWeight: "700",
-    cursor: "pointer",
-  },
-  toolButtonActive: {
-    background: "#2563eb",
-  },
-  toolButtonSecondary: {
-    flex: 1,
-    minWidth: "100px",
-    padding: "12px 14px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "14px",
-    background: "#ffffff",
-    color: "#111827",
-    fontWeight: "700",
-    cursor: "pointer",
   },
   playGuideBox: {
     width: "360px",
