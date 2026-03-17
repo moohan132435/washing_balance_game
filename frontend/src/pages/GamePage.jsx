@@ -51,21 +51,21 @@ function buildSpots() {
 }
 
 function getResultType(score) {
-  if (score >= 92) return "피부 응급처치 마스터";
-  if (score >= 74) return "침착한 진정형";
-  if (score >= 50) return "조금만 더 관찰형";
+  if (score >= 94) return "피부 응급처치 마스터";
+  if (score >= 76) return "침착한 진정형";
+  if (score >= 52) return "조금만 더 관찰형";
   return "손부터 가는 압출형";
 }
 
 function getResultMessage(score) {
-  if (score >= 92) return "상태를 보고 맞는 케어를 거의 놓치지 않았어요.";
-  if (score >= 74) return "큰 실수 없이 안정적으로 관리했어요.";
-  if (score >= 50) return "조금만 더 보고 고르면 점수가 더 올라가요.";
+  if (score >= 94) return "상태를 보고 맞는 케어를 거의 놓치지 않았어요.";
+  if (score >= 76) return "큰 실수 없이 안정적으로 관리했어요.";
+  if (score >= 52) return "조금만 더 보고 고르면 점수가 더 올라가요.";
   return "건드리기 전에 한 번 더 보는 습관이 필요해요.";
 }
 
 function computeScore(spots, timeLeft) {
-  let score = 12;
+  let score = 8;
   let correct = 0;
   let partial = 0;
   let wrong = 0;
@@ -75,33 +75,42 @@ function computeScore(spots, timeLeft) {
     wrong += spot.wrongCount;
 
     if (spot.type === "inflamed") {
-      if (spot.treated) {
-        score += 7;
+      if (spot.treated && !spot.resolved) {
+        score += 3;
         partial += 1;
       }
-      if (spot.patched) {
-        score += 10;
-        correct += 1;
-      }
-      if (spot.resolved) resolved += 1;
-      if (!spot.resolved) score -= 4;
-    } else {
+
       if (spot.resolved) {
         score += 14;
         correct += 1;
         resolved += 1;
-      } else if (spot.washProgress >= 1) {
-        score += 4;
-        partial += 1;
-        score -= 2;
       } else {
-        score -= 5;
+        score -= 10;
       }
+
+      score -= spot.squeezeCount * 7;
+      return;
     }
+
+    if (spot.resolved) {
+      score += 11;
+      correct += 1;
+      resolved += 1;
+      return;
+    }
+
+    if (spot.washProgress >= 1) {
+      score += 1;
+      partial += 1;
+      score -= 6;
+      return;
+    }
+
+    score -= 8;
   });
 
-  score -= wrong * 12;
-  score += Math.max(0, Math.min(3, Math.floor(timeLeft / 3)));
+  score -= wrong * 15;
+  score += Math.max(0, Math.min(2, Math.floor(timeLeft / 5)));
   score = Math.max(0, Math.min(100, score));
   return { score, correct, partial, wrong, resolved };
 }
@@ -346,6 +355,7 @@ function GamePage() {
         setStatusMessage("붉은 화농성은 세안만으로 해결되지 않아요. 빨간 연고 버튼을 먼저 써보세요.");
         return {
           ...spot,
+          wrongCount: spot.wrongCount + 1,
           actionLog: [...spot.actionLog, "wash"],
         };
       })
@@ -409,7 +419,7 @@ function GamePage() {
           if (selectedTool === "squeeze") {
             nextSpot.wrongCount += 1;
             nextSpot.squeezeCount += 1;
-            nextMessage = "압출은 점수만 깎여요. 붉은 스팟은 빨간 연고 버튼이 먼저예요.";
+            nextMessage = "압출은 점수만 크게 깎여요. 붉은 스팟은 빨간 연고 버튼이 먼저예요.";
             return nextSpot;
           }
 
@@ -430,6 +440,7 @@ function GamePage() {
 
         if (selectedTool === "squeeze") {
           nextSpot.wrongCount += 1;
+          nextSpot.squeezeCount += 1;
           nextMessage = "비화농성도 압출보다 세안이 나아요.";
           return nextSpot;
         }
