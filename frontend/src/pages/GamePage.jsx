@@ -19,10 +19,9 @@ const SPOT_BLUEPRINTS = [
 ];
 
 const TOOL_META = {
-  wash: { label: "세안", sub: "문지르기", bg: "#ffffff", color: "#0f172a", border: "#cbd5e1" },
+  wash: { label: "세안", sub: "분홍 트러블", bg: "#f472b6", color: "#ffffff", border: "#f472b6" },
   ointment: { label: "연고", sub: "붉은 트러블", bg: "#ef4444", color: "#ffffff", border: "#ef4444" },
   patch: { label: "패치", sub: "진정 마무리", bg: "#f59e0b", color: "#111827", border: "#f59e0b" },
-  squeeze: { label: "압출", sub: "위험 선택", bg: "#0f172a", color: "#ffffff", border: "#0f172a" },
 };
 
 function shuffle(list) {
@@ -195,11 +194,15 @@ function GamePage() {
   const [isRubbing, setIsRubbing] = useState(false);
   const nickname = localStorage.getItem("nickname") || "PLAYER";
   const selectedFaceKey = localStorage.getItem("selectedFaceKey");
-  const [faceKey] = useState(() => (selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female"));
+  const [faceKey] = useState(() =>
+    selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female"
+  );
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const [selectedTool, setSelectedTool] = useState("wash");
   const [spots, setSpots] = useState(() => buildSpots());
-  const [statusMessage, setStatusMessage] = useState("세안은 얼굴을 문질러서, 연고·패치·압출은 스팟을 눌러서 진행해보세요.");
+  const [statusMessage, setStatusMessage] = useState(
+    "세안은 얼굴을 문질러서, 연고·패치는 스팟을 눌러서 진행해보세요."
+  );
   const [foamPoints, setFoamPoints] = useState([]);
 
   const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved).length, [spots]);
@@ -338,7 +341,11 @@ function GamePage() {
             resolved,
           };
 
-          setStatusMessage(resolved ? "분홍 트러블이 세안으로 정리됐어요." : "좋아요. 분홍 스팟을 한 번 더 문질러 마무리해보세요.");
+          setStatusMessage(
+            resolved
+              ? "분홍 트러블이 세안으로 정리됐어요."
+              : "좋아요. 분홍 스팟을 한 번 더 문질러 마무리해보세요."
+          );
           if (resolved) triggerFadeOut(spot.id);
           return nextSpot;
         }
@@ -408,13 +415,6 @@ function GamePage() {
             return nextSpot;
           }
 
-          if (selectedTool === "squeeze") {
-            nextSpot.wrongCount += 2;
-            nextSpot.squeezeCount += 1;
-            nextMessage = "압출은 점수만 크게 깎여요. 붉은 스팟엔 빨간 연고가 먼저예요.";
-            return nextSpot;
-          }
-
           return nextSpot;
         }
 
@@ -430,13 +430,6 @@ function GamePage() {
           return nextSpot;
         }
 
-        if (selectedTool === "squeeze") {
-          nextSpot.wrongCount += 2;
-          nextSpot.squeezeCount += 1;
-          nextMessage = "비화농성도 압출보다 세안이 나아요.";
-          return nextSpot;
-        }
-
         return nextSpot;
       })
     );
@@ -449,7 +442,9 @@ function GamePage() {
     <div style={styles.wrapper}>
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <button type="button" style={styles.closeButton} onClick={() => navigate("/")}>✕</button>
+          <button type="button" style={styles.closeButton} onClick={() => navigate("/")}>
+            ✕
+          </button>
           <div style={styles.smallStatus}>남은 트러블 {unresolvedCount}개</div>
         </div>
 
@@ -520,9 +515,15 @@ function GamePage() {
           </div>
 
           <div style={styles.legendRow}>
-            <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#ef4444" }} /> 화농성</div>
-            <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#f472b6" }} /> 비화농성</div>
-            <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#3b82f6" }} /> 해결됨</div>
+            <div style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, background: "#ef4444" }} /> 화농성
+            </div>
+            <div style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, background: "#f472b6" }} /> 비화농성
+            </div>
+            <div style={styles.legendItem}>
+              <span style={{ ...styles.legendDot, background: "#3b82f6" }} /> 해결됨
+            </div>
           </div>
 
           <div style={styles.bottomHint}>{statusMessage}</div>
@@ -660,7 +661,8 @@ const styles = {
     width: "18px",
     height: "18px",
     borderRadius: "50%",
-    background: "radial-gradient(circle at 30% 30%, #ffffff 0%, #ffffff 35%, rgba(255,255,255,0.68) 60%, rgba(255,255,255,0) 100%)",
+    background:
+      "radial-gradient(circle at 30% 30%, #ffffff 0%, #ffffff 35%, rgba(255,255,255,0.68) 60%, rgba(255,255,255,0) 100%)",
     transform: "translate(-50%, -50%)",
     pointerEvents: "none",
     boxShadow: "0 0 8px rgba(255,255,255,0.65)",
@@ -709,7 +711,7 @@ const styles = {
   },
   toolGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "1fr 1fr 1fr",
     gap: "10px",
   },
   toolButton: {
