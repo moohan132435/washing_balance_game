@@ -64,13 +64,13 @@ function IntroPage() {
                   boxShadow: active ? "0 0 0 3px rgba(29,78,216,0.12)" : "none",
                 }}
               >
-                {option.key === "female" ? "여 캐릭터" : "남 캐릭터"}
+                {option.key === "female" ? "여자" : "남자"}
               </button>
             );
           })}
         </div>
 
-        <div style={styles.stepGrid}>
+        {/* <div style={styles.stepGrid}>
           <div style={styles.stepCard}>
             <div style={styles.stepNumber}>1</div>
             <div style={styles.stepText}>피부 상태 보기</div>
@@ -83,7 +83,7 @@ function IntroPage() {
             <div style={styles.stepNumber}>3</div>
             <div style={styles.stepText}>점수 확인</div>
           </div>
-        </div>
+        </div> */}
 
         <input
           type="text"
