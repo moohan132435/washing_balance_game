@@ -8,12 +8,12 @@ const FACE_SRC = {
 };
 
 const SPOT_BLUEPRINTS = [
-  { id: "spot-1", x: 50, y: 32, type: "inflamed" },
-  { id: "spot-2", x: 38, y: 42, type: "nonInflamed" },
-  { id: "spot-3", x: 61, y: 46, type: "inflamed" },
-  { id: "spot-4", x: 46, y: 55, type: "nonInflamed" },
-  { id: "spot-5", x: 58, y: 60, type: "inflamed" },
-  { id: "spot-6", x: 41, y: 61, type: "nonInflamed" },
+  { id: "spot-1", x: 49, y: 35, type: "inflamed" },
+  { id: "spot-2", x: 39, y: 42, type: "nonInflamed" },
+  { id: "spot-3", x: 59, y: 45, type: "inflamed" },
+  { id: "spot-4", x: 45, y: 54, type: "nonInflamed" },
+  { id: "spot-5", x: 56, y: 58, type: "inflamed" },
+  { id: "spot-6", x: 41, y: 60, type: "nonInflamed" },
 ];
 
 const TOOL_META = {
@@ -36,8 +36,9 @@ function buildSpots() {
       patched: false,
       resolved: false,
       wrongCount: 0,
-      actionLog: [],
+      squeezeCount: 0,
       washProgress: 0,
+      actionLog: [],
     }));
 }
 
@@ -96,9 +97,10 @@ function computeScore(spots, timeLeft) {
 function getSpotView(spot) {
   if (spot.resolved) {
     return {
-      size: 12,
+      size: 10,
+      hitSize: 26,
       color: "rgba(59,130,246,0.95)",
-      ring: "0 0 0 4px rgba(191,219,254,0.5)",
+      ring: "0 0 0 3px rgba(191,219,254,0.45)",
       label: "✓",
       textColor: "#ffffff",
     };
@@ -107,55 +109,50 @@ function getSpotView(spot) {
   if (spot.type === "inflamed") {
     if (spot.patched) {
       return {
-        size: 16,
+        size: 14,
+        hitSize: 28,
         color: "rgba(59,130,246,0.98)",
-        ring: "0 0 0 4px rgba(147,197,253,0.45)",
+        ring: "0 0 0 3px rgba(147,197,253,0.38)",
         label: "",
         textColor: "#ffffff",
       };
     }
     if (spot.treated) {
       return {
-        size: 18,
+        size: 13,
+        hitSize: 28,
         color: "rgba(245,158,11,0.95)",
-        ring: "0 0 0 4px rgba(253,230,138,0.42)",
+        ring: "0 0 0 3px rgba(253,230,138,0.34)",
         label: "",
         textColor: "#ffffff",
       };
     }
     return {
-      size: 20,
+      size: 14,
+      hitSize: 30,
       color: "rgba(239,68,68,0.94)",
-      ring: "0 0 0 4px rgba(254,202,202,0.42)",
+      ring: "0 0 0 3px rgba(254,202,202,0.35)",
       label: "",
       textColor: "#ffffff",
     };
   }
 
-  if (spot.washProgress >= 2) {
+  if (spot.washProgress >= 1) {
     return {
-      size: 12,
-      color: "rgba(59,130,246,0.95)",
-      ring: "0 0 0 4px rgba(191,219,254,0.5)",
-      label: "✓",
-      textColor: "#ffffff",
-    };
-  }
-
-  if (spot.washProgress === 1) {
-    return {
-      size: 15,
-      color: "rgba(250,204,21,0.92)",
-      ring: "0 0 0 4px rgba(254,240,138,0.34)",
+      size: 11,
+      hitSize: 26,
+      color: "rgba(250,204,21,0.9)",
+      ring: "0 0 0 3px rgba(254,240,138,0.26)",
       label: "",
       textColor: "#111827",
     };
   }
 
   return {
-    size: 18,
+    size: 13,
+    hitSize: 28,
     color: "rgba(245,158,11,0.92)",
-    ring: "0 0 0 4px rgba(254,240,138,0.34)",
+    ring: "0 0 0 3px rgba(254,240,138,0.28)",
     label: "",
     textColor: "#111827",
   };
@@ -173,7 +170,7 @@ function getPointerPosition(event, element) {
 function GamePage() {
   const navigate = useNavigate();
   const faceStageRef = useRef(null);
-  const rubLockRef = useRef(new Map());
+  const lastRubAtRef = useRef(new Map());
   const [isRubbing, setIsRubbing] = useState(false);
   const nickname = localStorage.getItem("nickname") || "PLAYER";
   const selectedFaceKey = localStorage.getItem("selectedFaceKey");
@@ -182,7 +179,7 @@ function GamePage() {
   const [selectedTool, setSelectedTool] = useState("wash");
   const [spots, setSpots] = useState(() => buildSpots());
   const [statusMessage, setStatusMessage] = useState("세안은 얼굴을 문질러서, 연고·패치·압출은 스팟을 눌러서 진행해보세요.");
-  const [finished, setFinished] = useState(false);
+  const finishedRef = useRef(false);
   const [foamPoints, setFoamPoints] = useState([]);
 
   const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved).length, [spots]);
@@ -193,12 +190,11 @@ function GamePage() {
   }, []);
 
   useEffect(() => {
-    if (finished) return undefined;
-
     const timer = window.setInterval(() => {
+      if (finishedRef.current) return;
+
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          window.clearInterval(timer);
           return 0;
         }
         return prev - 1;
@@ -206,43 +202,43 @@ function GamePage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [finished]);
+  }, []);
 
   useEffect(() => {
-    if (finished) return;
+  if (finishedRef.current) return;
 
-    if (timeLeft === 0 || unresolvedCount === 0) {
-      setFinished(true);
-      const { score, correct, partial, wrong, resolved } = computeScore(spots, timeLeft);
-      const resultType = getResultType(score);
+  if (timeLeft === 0 || unresolvedCount === 0) {
+    finishedRef.current = true;
 
-      navigate("/result", {
-        replace: true,
-        state: {
-          nickname,
-          score,
-          grade: resultType,
-          resultType,
-          resultMessage: getResultMessage(score),
-          scenarioSummary: `해결 ${resolved}/${spots.length} · 오답 ${wrong}회`,
-          ctaText: "와디즈 보러가기",
-          careStats: {
-            totalSpots: spots.length,
-            resolved,
-            correct,
-            partial,
-            wrong,
-          },
-          currentAttemptAt: new Date().toISOString(),
+    const { score, correct, partial, wrong, resolved } = computeScore(spots, timeLeft);
+    const resultType = getResultType(score);
+
+    navigate("/result", {
+      replace: true,
+      state: {
+        nickname,
+        score,
+        grade: resultType,
+        resultType,
+        resultMessage: getResultMessage(score),
+        scenarioSummary: `해결 ${resolved}/${spots.length} · 오답 ${wrong}회`,
+        ctaText: "와디즈 보러가기",
+        careStats: {
+          totalSpots: spots.length,
+          resolved,
+          correct,
+          partial,
+          wrong,
         },
-      });
-    }
-  }, [finished, navigate, nickname, spots, timeLeft, unresolvedCount]);
+      },
+    });
+  }
+}, [timeLeft, unresolvedCount, spots, nickname, navigate]);
 
   useEffect(() => {
     if (!foamPoints.length) return undefined;
     const timer = window.setTimeout(() => {
-      setFoamPoints((prev) => prev.slice(-6));
+      setFoamPoints((prev) => prev.slice(-8));
     }, 220);
     return () => window.clearTimeout(timer);
   }, [foamPoints]);
@@ -251,26 +247,27 @@ function GamePage() {
     if (!position) return;
 
     const faceCenterX = 50;
-    const faceCenterY = 52;
-    const faceRadiusX = 26;
-    const faceRadiusY = 33;
+    const faceCenterY = 56;
+    const faceRadiusX = 19;
+    const faceRadiusY = 28;
     const normX = (position.x - faceCenterX) / faceRadiusX;
     const normY = (position.y - faceCenterY) / faceRadiusY;
     const insideFace = normX * normX + normY * normY <= 1;
 
     if (!insideFace) return;
 
-    setFoamPoints((prev) => [...prev.slice(-10), { ...position, id: `${Date.now()}-${Math.random()}` }]);
+    setFoamPoints((prev) => [...prev.slice(-12), { ...position, id: `${Date.now()}-${Math.random()}` }]);
 
     setSpots((prev) =>
       prev.map((spot) => {
         if (spot.resolved) return spot;
 
         const distance = Math.hypot(position.x - spot.x, position.y - spot.y);
-        const lockKey = `${spot.id}-${Math.round(position.x)}-${Math.round(position.y)}`;
-        if (distance > 7 || rubLockRef.current.has(lockKey)) return spot;
-        rubLockRef.current.set(lockKey, true);
-        window.setTimeout(() => rubLockRef.current.delete(lockKey), 120);
+        const lastKey = `${spot.id}`;
+        const lastRubAt = lastRubAtRef.current.get(lastKey) || 0;
+
+        if (distance > 6 || Date.now() - lastRubAt < 140) return spot;
+        lastRubAtRef.current.set(lastKey, Date.now());
 
         if (spot.type === "nonInflamed") {
           const nextProgress = Math.min(2, spot.washProgress + 1);
@@ -280,11 +277,11 @@ function GamePage() {
             washProgress: nextProgress,
             resolved: nextProgress >= 2,
           };
-          setStatusMessage(nextProgress >= 2 ? "비화농성 트러블이 세안으로 정리됐어요." : "좋아요. 조금 더 부드럽게 문질러보세요.");
+          setStatusMessage(nextProgress >= 2 ? "비화농성 트러블이 세안으로 정리됐어요." : "좋아요. 거품으로 한 번 더 부드럽게 문질러보세요.");
           return nextSpot;
         }
 
-        setStatusMessage("붉은 화농성은 세안만으로 끝내기보다 진정 관리가 먼저예요.");
+        setStatusMessage("붉은 화농성은 세안만으로 해결되지 않아요. 연고나 패치를 써보세요.");
         return {
           ...spot,
           actionLog: [...spot.actionLog, "wash"],
@@ -294,13 +291,13 @@ function GamePage() {
   };
 
   const handleRubStart = (event) => {
-    if (selectedTool !== "wash" || finished || timeLeft === 0) return;
+    if (selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
     setIsRubbing(true);
     applyWash(getPointerPosition(event, faceStageRef.current));
   };
 
   const handleRubMove = (event) => {
-    if (!isRubbing || selectedTool !== "wash" || finished || timeLeft === 0) return;
+    if (!isRubbing || selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
     applyWash(getPointerPosition(event, faceStageRef.current));
   };
 
@@ -309,7 +306,7 @@ function GamePage() {
   };
 
   const handleSpotClick = (spotId) => {
-    if (finished || timeLeft === 0 || selectedTool === "wash") return;
+    if (finishedRef.current || timeLeft === 0 || selectedTool === "wash") return;
 
     let nextMessage = "";
 
@@ -324,6 +321,10 @@ function GamePage() {
 
         if (spot.type === "inflamed") {
           if (selectedTool === "ointment") {
+            if (spot.treated) {
+              nextMessage = "이미 연고로 진정 중이에요. 패치로 마무리해보세요.";
+              return spot;
+            }
             nextSpot.treated = true;
             nextMessage = "좋아요. 화농성은 먼저 진정 단계로 들어갔어요.";
             return nextSpot;
@@ -337,12 +338,17 @@ function GamePage() {
               return nextSpot;
             }
             nextSpot.wrongCount += 1;
-            nextMessage = "화농성은 패치 전에 진정 단계가 먼저예요.";
+            nextMessage = "화농성은 패치 전에 연고로 먼저 진정시켜보세요.";
             return nextSpot;
           }
 
-          nextSpot.wrongCount += 1;
-          nextMessage = "붉은 화농성은 바로 압출하기보다 진정부터 보는 편이 좋아요.";
+          if (selectedTool === "squeeze") {
+            nextSpot.wrongCount += 1;
+            nextSpot.squeezeCount += 1;
+            nextMessage = "붉은 화농성은 바로 압출하기보다 진정부터 보는 편이 좋아요.";
+            return nextSpot;
+          }
+
           return nextSpot;
         }
 
@@ -358,8 +364,12 @@ function GamePage() {
           return nextSpot;
         }
 
-        nextSpot.wrongCount += 1;
-        nextMessage = "비화농성은 압출보다 세안으로 정리해보세요.";
+        if (selectedTool === "squeeze") {
+          nextSpot.wrongCount += 1;
+          nextMessage = "비화농성도 압출보다 세안으로 정리해보세요.";
+          return nextSpot;
+        }
+
         return nextSpot;
       })
     );
@@ -376,9 +386,7 @@ function GamePage() {
         </div>
 
         <div style={styles.stageCard}>
-          <div style={styles.titleRow}>
-            <h1 style={styles.title}>이 여드름, 어떻게 할까?</h1>
-          </div>
+          <h1 style={styles.title}>이 여드름, 어떻게 할까?</h1>
 
           <div
             ref={faceStageRef}
@@ -417,17 +425,25 @@ function GamePage() {
                   onClick={() => handleSpotClick(spot.id)}
                   style={{
                     ...styles.spotButton,
-                    width: `${view.size}px`,
-                    height: `${view.size}px`,
+                    width: `${view.hitSize}px`,
+                    height: `${view.hitSize}px`,
                     left: `${spot.x}%`,
                     top: `${spot.y}%`,
-                    background: view.color,
-                    boxShadow: view.ring,
-                    color: view.textColor,
                   }}
                   aria-label={spot.type === "inflamed" ? "화농성 트러블" : "비화농성 트러블"}
                 >
-                  {view.label}
+                  <span
+                    style={{
+                      ...styles.spotVisual,
+                      width: `${view.size}px`,
+                      height: `${view.size}px`,
+                      background: view.color,
+                      boxShadow: view.ring,
+                      color: view.textColor,
+                    }}
+                  >
+                    {view.label}
+                  </span>
                 </button>
               );
             })}
@@ -447,7 +463,10 @@ function GamePage() {
               <button
                 key={key}
                 type="button"
-                onClick={() => setSelectedTool(key)}
+                onClick={() => {
+                  setSelectedTool(key);
+                  setStatusMessage(key === "wash" ? "세안 모드예요. 얼굴 위 트러블 부근을 직접 문질러보세요." : `${meta.label} 선택됨. 스팟을 눌러 관리해보세요.`);
+                }}
                 style={{
                   ...styles.toolButton,
                   background: meta.bg,
@@ -491,9 +510,9 @@ const styles = {
     gap: "12px",
   },
   closeButton: {
-    width: "48px",
-    height: "48px",
-    borderRadius: "16px",
+    width: "44px",
+    height: "44px",
+    borderRadius: "14px",
     border: "1px solid #d4deed",
     background: "#f8fbff",
     color: "#0f172a",
@@ -516,17 +535,11 @@ const styles = {
     gap: "8px",
     minHeight: 0,
   },
-  titleRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "12px",
-  },
   title: {
     margin: 0,
     color: "#0f172a",
-    fontSize: "clamp(28px, 7vw, 42px)",
-    lineHeight: 1.02,
+    fontSize: "clamp(24px, 6.4vw, 38px)",
+    lineHeight: 1.05,
     letterSpacing: "-0.05em",
     fontWeight: 900,
   },
@@ -535,7 +548,7 @@ const styles = {
     borderRadius: "26px",
     overflow: "hidden",
     background: "linear-gradient(180deg, #101624 0%, #15203f 100%)",
-    minHeight: "0",
+    minHeight: 0,
     height: "100%",
     touchAction: "none",
     userSelect: "none",
@@ -544,32 +557,32 @@ const styles = {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    objectPosition: "center 28%",
+    objectPosition: "center 24%",
     display: "block",
     userSelect: "none",
     WebkitUserDrag: "none",
   },
   timerBox: {
     position: "absolute",
-    top: "12px",
-    right: "12px",
-    width: "74px",
-    borderRadius: "18px",
+    top: "10px",
+    right: "10px",
+    width: "66px",
+    borderRadius: "16px",
     background: "linear-gradient(180deg, #0b1535 0%, #09112a 100%)",
-    padding: "9px 8px",
+    padding: "8px 6px",
     textAlign: "center",
-    zIndex: 3,
+    zIndex: 5,
   },
   timerLabel: {
     color: "#9dbdff",
-    fontSize: "9px",
+    fontSize: "8px",
     letterSpacing: "0.22em",
     fontWeight: 900,
   },
   timerValue: {
     color: "#f7d548",
     fontWeight: 900,
-    fontSize: "34px",
+    fontSize: "30px",
     lineHeight: 1,
     fontVariantNumeric: "tabular-nums",
     textShadow: "0 0 16px rgba(247,213,72,0.2)",
@@ -577,11 +590,11 @@ const styles = {
   foamDot: {
     position: "absolute",
     transform: "translate(-50%, -50%)",
-    width: "18px",
-    height: "18px",
+    width: "14px",
+    height: "14px",
     borderRadius: "50%",
-    background: "rgba(255,255,255,0.88)",
-    boxShadow: "0 0 0 4px rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.9)",
+    boxShadow: "0 0 0 3px rgba(255,255,255,0.18)",
     pointerEvents: "none",
     zIndex: 2,
   },
@@ -592,9 +605,16 @@ const styles = {
     border: "none",
     display: "grid",
     placeItems: "center",
+    background: "transparent",
+    padding: 0,
+    zIndex: 6,
+  },
+  spotVisual: {
+    borderRadius: "50%",
+    display: "grid",
+    placeItems: "center",
     fontWeight: 900,
-    fontSize: "10px",
-    zIndex: 4,
+    fontSize: "9px",
   },
   legendRow: {
     display: "flex",
@@ -624,7 +644,7 @@ const styles = {
   toolButton: {
     borderRadius: "22px",
     border: "2px solid transparent",
-    minHeight: "84px",
+    minHeight: "82px",
     padding: "12px",
     textAlign: "center",
   },
