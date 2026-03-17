@@ -1,13 +1,44 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+const FACE_POOL = [
+  { key: "male", src: "/faces/male_face_game.png", label: "남자 피부" },
+  { key: "female", src: "/faces/female_face_game.png", label: "여자 피부" },
+];
+
+function pickRandomFace() {
+  return FACE_POOL[Math.floor(Math.random() * FACE_POOL.length)];
+}
 
 function IntroPage() {
   const navigate = useNavigate();
   const [nickname, setNickname] = useState(localStorage.getItem("nickname") || "");
+  const [face, setFace] = useState(() => pickRandomFace());
+
+  useEffect(() => {
+    localStorage.setItem("selectedFaceKey", face.key);
+  }, [face]);
+
+  const helperText = useMemo(
+    () => ["화농성은 진정 먼저", "좁쌀·블랙헤드는 세안 우선", "압출은 정답이 아닐 수 있어요"],
+    []
+  );
 
   const handleStart = () => {
-    const trimmed = nickname.trim() || "PLAYER";
-    localStorage.setItem("nickname", trimmed.slice(0, 12));
+    const trimmed = nickname.trim();
+
+    if (!trimmed) {
+      alert("닉네임을 입력해주세요.");
+      return;
+    }
+
+    if (trimmed.length < 2 || trimmed.length > 10) {
+      alert("닉네임은 2~10자로 입력해주세요.");
+      return;
+    }
+
+    localStorage.setItem("nickname", trimmed);
+    localStorage.setItem("selectedFaceKey", face.key);
     navigate("/game");
   };
 
@@ -16,55 +47,46 @@ function IntroPage() {
       <div style={styles.card}>
         <div style={styles.badge}>10초 피부 판단 게임</div>
         <h1 style={styles.title}>이 여드름, 어떻게 할까?</h1>
-        <p style={styles.subtitle}>
-          화농성인지 비화농성인지 보고<br />
-          세안·연고·패치·압출 중 더 나은 선택을 해보세요.
-        </p>
+        <p style={styles.subtitle}>화농성인지 비화농성인지 보고 세안 · 연고 · 패치 · 압출 중 더 나은 선택을 해보세요.</p>
 
-        <div style={styles.previewBoard}>
-          <div style={styles.previewTimer}>10</div>
-          <div style={styles.previewFaceWrap}>
-            <div style={styles.previewFace}>
-              <div style={{ ...styles.previewSpot, top: "34%", left: "48%", background: "#ef4444" }} />
-              <div style={{ ...styles.previewSpot, top: "50%", left: "34%", background: "#f59e0b" }} />
-              <div style={{ ...styles.previewSpot, top: "50%", left: "63%", background: "#fde68a" }} />
-            </div>
+        <div style={styles.heroFrame}>
+          <img src={face.src} alt={face.label} style={styles.heroImage} />
+          <button type="button" style={styles.shuffleButton} onClick={() => setFace(pickRandomFace())}>
+            얼굴 바꾸기
+          </button>
+        </div>
+
+        <div style={styles.stepGrid}>
+          <div style={styles.stepCard}>
+            <div style={styles.stepNumber}>1</div>
+            <div style={styles.stepText}>여드름 상태 확인</div>
+          </div>
+          <div style={styles.stepCard}>
+            <div style={styles.stepNumber}>2</div>
+            <div style={styles.stepText}>알맞은 관리 선택</div>
+          </div>
+          <div style={styles.stepCard}>
+            <div style={styles.stepNumber}>3</div>
+            <div style={styles.stepText}>점수와 랭킹 확인</div>
           </div>
         </div>
 
-        <div style={styles.guideGrid}>
-          <div style={styles.guideCard}>
-            <div style={styles.guideStep}>1</div>
-            <div style={styles.guideText}>여드름 상태 확인</div>
-          </div>
-          <div style={styles.guideCard}>
-            <div style={styles.guideStep}>2</div>
-            <div style={styles.guideText}>알맞은 관리 선택</div>
-          </div>
-          <div style={styles.guideCard}>
-            <div style={styles.guideStep}>3</div>
-            <div style={styles.guideText}>점수와 랭킹 확인</div>
-          </div>
-        </div>
-
-        <div style={styles.tipBox}>
-          압출은 무조건 정답이 아니에요. 게임처럼 가볍게 판단해보세요.
+        <div style={styles.helperBox}>
+          {helperText.map((item) => (
+            <div key={item} style={styles.helperLine}>{item}</div>
+          ))}
         </div>
 
         <input
-          style={styles.input}
-          placeholder="닉네임 입력"
-          maxLength={12}
+          type="text"
+          placeholder="닉네임 입력 (2~10자)"
           value={nickname}
+          maxLength={10}
           onChange={(e) => setNickname(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleStart();
-          }}
+          style={styles.input}
         />
 
-        <button style={styles.button} onClick={handleStart}>
-          시작하기
-        </button>
+        <button style={styles.startButton} onClick={handleStart}>시작하기</button>
       </div>
     </div>
   );
@@ -73,152 +95,145 @@ function IntroPage() {
 const styles = {
   wrapper: {
     minHeight: "100svh",
+    background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "20px 16px",
-    background: "radial-gradient(circle at top, #dbeafe 0%, #eef2ff 35%, #f8fafc 100%)",
+    padding: "16px",
     boxSizing: "border-box",
   },
   card: {
     width: "100%",
-    maxWidth: "430px",
-    background: "rgba(255,255,255,0.95)",
-    borderRadius: "30px",
-    padding: "24px 18px 20px",
-    boxShadow: "0 22px 60px rgba(15,23,42,0.12)",
-    border: "1px solid rgba(255,255,255,0.9)",
-    textAlign: "center",
+    maxWidth: "460px",
+    background: "rgba(255,255,255,0.96)",
+    borderRadius: "28px",
+    padding: "18px",
+    boxShadow: "0 18px 46px rgba(15,23,42,0.1)",
+    border: "1px solid #dbe4f0",
+    display: "grid",
+    gap: "14px",
   },
   badge: {
-    display: "inline-flex",
-    height: "32px",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "0 14px",
-    borderRadius: "999px",
+    justifySelf: "center",
     background: "#0f172a",
-    color: "#fff",
-    fontWeight: 800,
-    fontSize: "12px",
-    letterSpacing: "0.08em",
+    color: "#ffffff",
+    padding: "10px 16px",
+    borderRadius: "999px",
+    fontWeight: 900,
+    fontSize: "14px",
+    letterSpacing: "0.02em",
   },
   title: {
-    margin: "14px 0 10px",
-    fontSize: "clamp(34px, 9vw, 48px)",
+    margin: 0,
+    textAlign: "center",
+    color: "#0f172a",
+    fontSize: "clamp(34px, 8vw, 56px)",
     lineHeight: 1.02,
     letterSpacing: "-0.05em",
-    color: "#0f172a",
+    fontWeight: 900,
   },
   subtitle: {
-    margin: "0 0 18px",
+    margin: 0,
+    textAlign: "center",
+    color: "#64748b",
     fontSize: "15px",
-    lineHeight: 1.55,
-    color: "#475569",
+    lineHeight: 1.5,
     wordBreak: "keep-all",
   },
-  previewBoard: {
+  heroFrame: {
     position: "relative",
     borderRadius: "28px",
-    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-    padding: "18px 16px 16px",
-    marginBottom: "14px",
+    background: "linear-gradient(180deg, #0f172a 0%, #111c3d 100%)",
     overflow: "hidden",
+    aspectRatio: "1 / 1",
+    minHeight: "260px",
   },
-  previewTimer: {
+  heroImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    objectPosition: "center 35%",
+    display: "block",
+  },
+  shuffleButton: {
     position: "absolute",
-    top: 12,
-    right: 14,
-    fontSize: "34px",
-    lineHeight: 1,
-    fontWeight: 900,
-    color: "#facc15",
-    textShadow: "0 0 12px rgba(250,204,21,0.55)",
-    fontFamily: "'Courier New', monospace",
+    right: "12px",
+    bottom: "12px",
+    border: "none",
+    borderRadius: "999px",
+    background: "rgba(255,255,255,0.92)",
+    color: "#0f172a",
+    padding: "10px 14px",
+    fontWeight: 800,
   },
-  previewFaceWrap: {
-    display: "flex",
-    justifyContent: "center",
-    paddingTop: "18px",
-  },
-  previewFace: {
-    position: "relative",
-    width: "190px",
-    height: "220px",
-    borderRadius: "46% 46% 42% 42% / 38% 38% 48% 48%",
-    background: "linear-gradient(180deg, #fde7d7 0%, #ffd8bf 100%)",
-    boxShadow: "inset 0 -10px 20px rgba(180,83,9,0.08)",
-  },
-  previewSpot: {
-    position: "absolute",
-    width: "18px",
-    height: "18px",
-    borderRadius: "50%",
-    transform: "translate(-50%, -50%)",
-    boxShadow: "0 0 0 4px rgba(255,255,255,0.18)",
-  },
-  guideGrid: {
+  stepGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, 1fr)",
     gap: "10px",
-    marginBottom: "14px",
   },
-  guideCard: {
+  stepCard: {
     borderRadius: "20px",
     background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    padding: "14px 10px",
+    border: "1px solid #dbe4f0",
+    padding: "12px 10px",
+    textAlign: "center",
+    minHeight: "108px",
+    display: "grid",
+    alignContent: "center",
+    gap: "8px",
   },
-  guideStep: {
-    width: "30px",
-    height: "30px",
-    margin: "0 auto 8px",
+  stepNumber: {
+    width: "44px",
+    height: "44px",
     borderRadius: "50%",
-    background: "#2563eb",
-    color: "#fff",
-    fontWeight: 800,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    margin: "0 auto",
+    display: "grid",
+    placeItems: "center",
+    background: "#3b63e6",
+    color: "#ffffff",
+    fontWeight: 900,
+    fontSize: "28px",
   },
-  guideText: {
-    fontSize: "13px",
-    color: "#334155",
-    fontWeight: 700,
-    lineHeight: 1.4,
+  stepText: {
+    color: "#1e293b",
+    fontSize: "14px",
+    fontWeight: 800,
+    lineHeight: 1.35,
     wordBreak: "keep-all",
   },
-  tipBox: {
+  helperBox: {
     borderRadius: "18px",
-    background: "#eff6ff",
-    color: "#1e3a8a",
+    background: "#eef4ff",
     padding: "12px 14px",
+    display: "grid",
+    gap: "6px",
+  },
+  helperLine: {
+    color: "#1f3ea7",
     fontSize: "14px",
-    lineHeight: 1.5,
-    marginBottom: "14px",
     fontWeight: 700,
   },
   input: {
     width: "100%",
-    boxSizing: "border-box",
     padding: "16px 18px",
     borderRadius: "18px",
     border: "1.5px solid #cbd5e1",
     fontSize: "16px",
-    marginBottom: "12px",
+    boxSizing: "border-box",
     outline: "none",
-    background: "#fff",
+    background: "#ffffff",
   },
-  button: {
+  startButton: {
     width: "100%",
+    padding: "17px 18px",
     border: "none",
     borderRadius: "20px",
-    padding: "18px 18px",
     background: "linear-gradient(90deg, #0f172a 0%, #1d4ed8 100%)",
-    color: "#fff",
-    fontWeight: 900,
+    color: "#ffffff",
     fontSize: "18px",
+    fontWeight: 900,
     cursor: "pointer",
+    boxShadow: "0 12px 24px rgba(29, 78, 216, 0.18)",
   },
 };
 

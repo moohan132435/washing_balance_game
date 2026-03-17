@@ -12,7 +12,14 @@ const FALLBACK_RESULT = {
   resultType: "결과 없음",
   resultMessage: "결과 데이터가 없습니다.",
   scenarioSummary: "",
+  currentAttemptAt: new Date().toISOString(),
 };
+
+function compareRank(a, b) {
+  const scoreGap = Number(b.score || 0) - Number(a.score || 0);
+  if (scoreGap !== 0) return scoreGap;
+  return new Date(a.updatedAt || a.currentAttemptAt || 0).getTime() - new Date(b.updatedAt || b.currentAttemptAt || 0).getTime();
+}
 
 function ResultPage() {
   const location = useLocation();
@@ -21,17 +28,17 @@ function ResultPage() {
 
   const [saved, setSaved] = useState(false);
   const [rankings, setRankings] = useState([]);
-  const [saveStatus, setSaveStatus] = useState("idle");
+  const [saveStatus, setSaveStatus] = useState(API_BASE_URL ? "idle" : "disabled");
 
   const payload = useMemo(
     () => ({
       nickname: result.nickname,
       score: result.score,
-      grade: result.resultType || result.grade,
+      grade: result.grade,
       cleanRate: 0,
       irritation: 0,
       moisture: 0,
-      balanceTime: Number(result.balanceTime || 0),
+      balanceTime: 10,
       scenarioSummary: result.scenarioSummary || "",
     }),
     [result]
@@ -40,6 +47,7 @@ function ResultPage() {
   useEffect(() => {
     const saveScore = async () => {
       if (!API_BASE_URL || saved) return;
+
       try {
         setSaveStatus("saving");
         await axios.post(`${API_BASE_URL}/api/scores`, payload);
@@ -50,24 +58,37 @@ function ResultPage() {
         setSaveStatus("error");
       }
     };
+
     saveScore();
   }, [API_BASE_URL, payload, saved]);
 
   useEffect(() => {
     const fetchRankings = async () => {
       if (!API_BASE_URL) return;
+
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/rankings`);
+        const response = await axios.get(`${API_BASE_URL}/api/rankings?limit=200`);
         setRankings(Array.isArray(response.data) ? response.data : []);
       } catch (error) {
         console.error("랭킹 조회 실패", error);
       }
     };
+
     fetchRankings();
   }, [API_BASE_URL, saveStatus]);
 
   const topFive = rankings.slice(0, 5);
-  const userRank = rankings.findIndex((item) => item.nickname === result.nickname) + 1;
+  const currentAttemptRank = useMemo(() => {
+    const virtualEntry = {
+      nickname: result.nickname,
+      score: Number(result.score || 0),
+      grade: result.grade,
+      currentAttemptAt: result.currentAttemptAt || new Date().toISOString(),
+    };
+
+    const ranked = [...rankings, virtualEntry].sort(compareRank);
+    return ranked.findIndex((item) => item.currentAttemptAt === virtualEntry.currentAttemptAt) + 1;
+  }, [rankings, result]);
 
   return (
     <div style={styles.wrapper}>
@@ -89,21 +110,19 @@ function ResultPage() {
           <div style={styles.typeDescription}>{result.resultMessage}</div>
         </div>
 
-        <div style={styles.rankGrid}>
+        <div style={styles.compactGrid}>
           <div style={styles.rankCard}>
             <div style={styles.rankCardLabel}>TOP 5 랭킹</div>
             <div style={styles.rankList}>
               {topFive.length === 0 ? (
-                <div style={styles.emptyText}>아직 랭킹이 없어요.</div>
+                <div style={styles.emptyText}>아직 저장된 랭킹이 없어요.</div>
               ) : (
                 topFive.map((item, index) => (
-                  <div key={`${item.nickname}-${index}`} style={styles.rankItem}>
-                    <div style={styles.rankLeft}>
-                      <div style={styles.rankBadge}>{index + 1}</div>
-                      <div>
-                        <div style={styles.rankName}>{item.nickname}</div>
-                        <div style={styles.rankType}>{item.grade}</div>
-                      </div>
+                  <div key={`${item.nickname}-${index}`} style={styles.rankRow}>
+                    <div style={styles.rankNumber}>{index + 1}</div>
+                    <div style={styles.rankNicknameWrap}>
+                      <div style={styles.rankNickname}>{item.nickname}</div>
+                      <div style={styles.rankGrade}>{item.grade}</div>
                     </div>
                     <div style={styles.rankScore}>{item.score}</div>
                   </div>
@@ -112,20 +131,38 @@ function ResultPage() {
             </div>
           </div>
 
-          <div style={styles.rankCard}>
+          <div style={styles.myRankCard}>
             <div style={styles.rankCardLabel}>내 랭킹</div>
-            <div style={styles.myRankBox}>
-              <div style={styles.myRankNumber}>{userRank > 0 ? `${userRank}등` : "-"}</div>
-              <div style={styles.myRankText}>{result.nickname}</div>
-              <div style={styles.myRankCaption}>{result.scenarioSummary || "이번 결과가 랭킹에 저장돼요."}</div>
-            </div>
+            <div style={styles.myRankValue}>{currentAttemptRank > 0 ? `${currentAttemptRank}등` : "집계 전"}</div>
+            <div style={styles.myRankText}>{result.nickname}</div>
+            <div style={styles.subInfo}>{result.scenarioSummary || "이번 플레이 기록"}</div>
           </div>
         </div>
 
+        <div style={styles.footerInfo}>
+          {saveStatus === "success"
+            ? "최고 점수 기준으로 랭킹이 저장됐어요."
+            : saveStatus === "error"
+            ? "랭킹 저장은 실패했지만 결과는 확인할 수 있어요."
+            : saveStatus === "disabled"
+            ? "API 연결 전이라 로컬 결과만 표시 중이에요."
+            : "랭킹 저장 중이에요."}
+        </div>
+
         <div style={styles.buttonGroup}>
-          <button style={styles.primaryButton} onClick={() => navigate("/game")}>다시하기</button>
-          <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>전체 랭킹</button>
-          <button style={styles.secondaryButton} onClick={() => window.open(WADIZ_URL, "_blank")}>와디즈 보러가기</button>
+          <button style={styles.primaryButton} onClick={() => window.open(WADIZ_URL, "_blank", "noopener,noreferrer")}>{result.ctaText || "와디즈 보러가기"}</button>
+          <div style={styles.secondaryGrid}>
+            <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>전체 랭킹 보기</button>
+            <button
+              style={styles.secondaryButton}
+              onClick={() => {
+                window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                navigate("/game");
+              }}
+            >
+              다시하기
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -135,162 +172,209 @@ function ResultPage() {
 const styles = {
   wrapper: {
     minHeight: "100svh",
-    padding: "20px 16px",
+    background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%)",
+    padding: "10px",
     boxSizing: "border-box",
     display: "flex",
-    justifyContent: "center",
     alignItems: "center",
-    background: "radial-gradient(circle at top, #dbeafe 0%, #eff6ff 36%, #f8fafc 100%)",
   },
   card: {
     width: "100%",
-    maxWidth: "460px",
+    maxWidth: "520px",
+    margin: "0 auto",
     background: "rgba(255,255,255,0.96)",
-    borderRadius: "30px",
-    padding: "22px 18px 18px",
-    boxShadow: "0 24px 60px rgba(15,23,42,0.12)",
-    border: "1px solid rgba(255,255,255,0.9)",
+    borderRadius: "28px",
+    padding: "16px",
+    boxShadow: "0 20px 48px rgba(15,23,42,0.1)",
+    border: "1px solid rgba(219,228,240,0.9)",
+    display: "grid",
+    gap: "12px",
   },
   headerRow: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "flex-start",
     gap: "12px",
-    marginBottom: "16px",
+    alignItems: "flex-start",
   },
   eyebrow: {
     fontSize: "12px",
-    color: "#2563eb",
     fontWeight: 900,
-    letterSpacing: "0.12em",
+    letterSpacing: "0.16em",
+    color: "#3b63e6",
+    marginBottom: "6px",
   },
   title: {
-    margin: "6px 0 0",
-    fontSize: "34px",
-    lineHeight: 1.05,
+    margin: 0,
+    fontSize: "32px",
+    lineHeight: 1,
     color: "#0f172a",
-    letterSpacing: "-0.04em",
+    fontWeight: 900,
   },
   scoreBox: {
-    minWidth: "98px",
-    borderRadius: "22px",
-    background: "#0f172a",
-    color: "#fff",
+    minWidth: "118px",
+    borderRadius: "24px",
+    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+    color: "#fef08a",
     padding: "12px 14px",
     textAlign: "center",
   },
   scoreLabel: {
     fontSize: "11px",
-    letterSpacing: "0.14em",
-    color: "#93c5fd",
     fontWeight: 900,
+    color: "#93c5fd",
+    letterSpacing: "0.18em",
   },
   scoreValue: {
-    marginTop: "4px",
-    fontSize: "34px",
+    fontSize: "46px",
     lineHeight: 1,
     fontWeight: 900,
-    color: "#facc15",
+    marginTop: "4px",
   },
   typeBox: {
-    borderRadius: "24px",
     background: "linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)",
     border: "1px solid #dbeafe",
-    padding: "18px 16px",
-    marginBottom: "14px",
+    borderRadius: "24px",
+    padding: "16px",
   },
   typeLabel: {
-    fontSize: "12px",
-    color: "#2563eb",
+    color: "#3b63e6",
+    fontSize: "13px",
     fontWeight: 900,
-    letterSpacing: "0.12em",
     marginBottom: "8px",
+    letterSpacing: "0.08em",
   },
   typeValue: {
-    fontSize: "28px",
-    lineHeight: 1.08,
-    fontWeight: 900,
     color: "#0f172a",
+    fontSize: "26px",
+    lineHeight: 1.15,
+    fontWeight: 900,
     marginBottom: "8px",
-  },
-  typeDescription: {
-    fontSize: "15px",
-    lineHeight: 1.55,
-    color: "#475569",
     wordBreak: "keep-all",
   },
-  rankGrid: {
+  typeDescription: {
+    color: "#475569",
+    fontSize: "15px",
+  },
+  compactGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr",
+    gridTemplateColumns: "1.25fr 0.9fr",
     gap: "12px",
-    marginBottom: "16px",
   },
   rankCard: {
     borderRadius: "24px",
     background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    padding: "16px 14px",
+    border: "1px solid #dbe4f0",
+    padding: "14px",
+  },
+  myRankCard: {
+    borderRadius: "24px",
+    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+    color: "#ffffff",
+    padding: "14px",
+    display: "grid",
+    alignContent: "start",
   },
   rankCardLabel: {
     fontSize: "14px",
     fontWeight: 900,
-    color: "#0f172a",
-    marginBottom: "12px",
+    color: "inherit",
+    marginBottom: "10px",
   },
-  rankList: { display: "flex", flexDirection: "column", gap: "10px" },
-  rankItem: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
+  rankList: {
+    display: "grid",
+    gap: "8px",
+  },
+  emptyText: {
+    color: "#64748b",
+    fontSize: "14px",
+  },
+  rankRow: {
+    display: "grid",
+    gridTemplateColumns: "34px 1fr auto",
     gap: "10px",
+    alignItems: "center",
   },
-  rankLeft: { display: "flex", alignItems: "center", gap: "10px" },
-  rankBadge: {
+  rankNumber: {
     width: "34px",
     height: "34px",
     borderRadius: "50%",
     background: "#0f172a",
-    color: "#fff",
+    color: "#ffffff",
+    display: "grid",
+    placeItems: "center",
     fontWeight: 900,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
-  rankName: { fontSize: "15px", fontWeight: 800, color: "#0f172a" },
-  rankType: { fontSize: "12px", color: "#64748b", marginTop: "2px" },
-  rankScore: { fontSize: "22px", fontWeight: 900, color: "#2563eb" },
-  myRankBox: {
-    borderRadius: "20px",
-    background: "#0f172a",
-    color: "#fff",
-    padding: "18px 14px",
+  rankNicknameWrap: {
+    minWidth: 0,
+  },
+  rankNickname: {
+    color: "#0f172a",
+    fontWeight: 800,
+    fontSize: "18px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  rankGrade: {
+    color: "#64748b",
+    fontSize: "13px",
+    marginTop: "2px",
+  },
+  rankScore: {
+    color: "#3b63e6",
+    fontWeight: 900,
+    fontSize: "20px",
+  },
+  myRankValue: {
+    color: "#f7d548",
+    fontSize: "56px",
+    lineHeight: 1,
+    fontWeight: 900,
+    margin: "8px 0 10px",
+  },
+  myRankText: {
+    fontWeight: 800,
+    fontSize: "19px",
+    marginBottom: "8px",
+  },
+  subInfo: {
+    color: "#cbd5e1",
+    fontSize: "14px",
+    lineHeight: 1.45,
+    wordBreak: "keep-all",
+  },
+  footerInfo: {
+    color: "#64748b",
+    fontSize: "13px",
     textAlign: "center",
   },
-  myRankNumber: { fontSize: "36px", fontWeight: 900, color: "#facc15", lineHeight: 1 },
-  myRankText: { fontSize: "16px", fontWeight: 800, marginTop: "8px" },
-  myRankCaption: { fontSize: "13px", color: "#cbd5e1", marginTop: "6px", lineHeight: 1.5 },
-  emptyText: { color: "#64748b", fontSize: "14px" },
-  buttonGroup: { display: "grid", gridTemplateColumns: "1fr", gap: "10px" },
+  buttonGroup: {
+    display: "grid",
+    gap: "10px",
+  },
   primaryButton: {
+    width: "100%",
+    padding: "16px 18px",
     border: "none",
     borderRadius: "20px",
     background: "linear-gradient(90deg, #0f172a 0%, #1d4ed8 100%)",
-    color: "#fff",
+    color: "#ffffff",
     fontSize: "17px",
     fontWeight: 900,
-    padding: "16px 18px",
-    cursor: "pointer",
+  },
+  secondaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
   },
   secondaryButton: {
-    border: "1.5px solid #cbd5e1",
-    borderRadius: "20px",
-    background: "#fff",
+    width: "100%",
+    padding: "14px 12px",
+    borderRadius: "18px",
+    border: "1px solid #dbe4f0",
+    background: "#ffffff",
     color: "#0f172a",
-    fontSize: "16px",
     fontWeight: 800,
-    padding: "15px 18px",
-    cursor: "pointer",
   },
 };
 

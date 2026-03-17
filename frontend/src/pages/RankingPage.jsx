@@ -10,22 +10,24 @@ function RankingPage() {
 
   useEffect(() => {
     const fetchRankings = async () => {
+      if (!API_BASE_URL) return;
+
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/rankings`);
+        const response = await axios.get(`${API_BASE_URL}/api/rankings?limit=100`);
         setRankings(Array.isArray(response.data) ? response.data : []);
       } catch (error) {
-        console.error("랭킹 조회 실패:", error);
+        console.error("랭킹 조회 실패", error);
       }
     };
 
-    if (API_BASE_URL) fetchRankings();
+    fetchRankings();
   }, []);
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.container}>
-        <h1 style={styles.title}>오락실 랭킹</h1>
-        <p style={styles.subtitle}>닉네임별 최고 점수 전체 랭킹</p>
+        <h1 style={styles.title}>전체 랭킹</h1>
+        <p style={styles.subtitle}>닉네임별 최고 점수 기준으로 정렬돼요.</p>
 
         <div style={styles.list}>
           {rankings.length === 0 ? (
@@ -37,7 +39,6 @@ function RankingPage() {
                 <div style={styles.playerInfo}>
                   <div style={styles.nickname}>{item.nickname}</div>
                   <div style={styles.grade}>{item.grade}</div>
-                  <div style={styles.scenario}>{item.scenarioSummary || ""}</div>
                 </div>
                 <div style={styles.score}>{item.score}점</div>
               </div>
@@ -58,13 +59,30 @@ const styles = {
   wrapper: {
     minHeight: "100svh",
     background: "linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%)",
-    padding: "24px 16px",
+    padding: "16px",
     boxSizing: "border-box",
   },
-  container: { maxWidth: "860px", margin: "0 auto" },
-  title: { textAlign: "center", fontSize: "36px", marginBottom: "8px", color: "#111827" },
-  subtitle: { textAlign: "center", color: "#64748b", marginBottom: "24px", fontSize: "16px" },
-  list: { display: "flex", flexDirection: "column", gap: "12px" },
+  container: {
+    maxWidth: "760px",
+    margin: "0 auto",
+  },
+  title: {
+    textAlign: "center",
+    fontSize: "34px",
+    marginBottom: "8px",
+    color: "#111827",
+  },
+  subtitle: {
+    textAlign: "center",
+    color: "#64748b",
+    marginBottom: "24px",
+    fontSize: "15px",
+  },
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
   emptyCard: {
     background: "#ffffff",
     borderRadius: "18px",
@@ -96,11 +114,24 @@ const styles = {
     fontSize: "18px",
     flexShrink: 0,
   },
-  playerInfo: { flex: 1 },
-  nickname: { fontSize: "20px", fontWeight: "800", color: "#111827" },
-  grade: { color: "#64748b", marginTop: "4px" },
-  scenario: { color: "#94a3b8", marginTop: "4px", fontSize: "13px" },
-  score: { fontSize: "24px", fontWeight: "800", color: "#2563eb", flexShrink: 0 },
+  playerInfo: {
+    flex: 1,
+  },
+  nickname: {
+    fontSize: "20px",
+    fontWeight: "800",
+    color: "#111827",
+  },
+  grade: {
+    color: "#64748b",
+    marginTop: "4px",
+  },
+  score: {
+    fontSize: "24px",
+    fontWeight: "800",
+    color: "#2563eb",
+    flexShrink: 0,
+  },
   buttonGroup: {
     marginTop: "24px",
     display: "flex",
