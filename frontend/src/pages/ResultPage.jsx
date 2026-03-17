@@ -1,196 +1,158 @@
-import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-const WADIZ_URL = import.meta.env.VITE_WADIZ_URL || "https://www.wadiz.kr";
-
-const FALLBACK_RESULT = {
-  nickname: localStorage.getItem("nickname") || "PLAYER",
-  score: 0,
-  grade: "결과 없음",
-  resultType: "결과 없음",
-  resultMessage: "결과 데이터가 없습니다.",
-  scenarioSummary: "",
-  currentAttemptAt: new Date().toISOString(),
-};
-
 function compareRank(a, b) {
-  const scoreGap = Number(b.score || 0) - Number(a.score || 0);
-  if (scoreGap !== 0) return scoreGap;
-  return new Date(a.updatedAt || a.currentAttemptAt || 0).getTime() - new Date(b.updatedAt || b.currentAttemptAt || 0).getTime();
+  if (Number(b.score) !== Number(a.score)) return Number(b.score) - Number(a.score);
+  return String(a.nickname || "").localeCompare(String(b.nickname || ""), "ko");
 }
 
-function ResultPage() {
-  const location = useLocation();
+function getGradeLabel(score, fallback) {
+  if (fallback) return fallback;
+  if (score >= 94) return "피부 응급처치 마스터";
+  if (score >= 78) return "침착한 진정형";
+  if (score >= 56) return "조금만 더 관찰형";
+  return "손부터 가는 압출형";
+}
+
+function getMessage(score, fallback) {
+  if (fallback) return fallback;
+  if (score >= 94) return "상태를 보고 맞는 케어를 거의 놓치지 않았어요.";
+  if (score >= 78) return "큰 실수 없이 안정적으로 관리했어요.";
+  if (score >= 56) return "조금만 더 보고 고르면 점수가 더 올라가요.";
+  return "건드리기 전에 한 번 더 보는 습관이 필요해요.";
+}
+
+function getDisplayName(name) {
+  if (!name) return "PLAYER";
+  return name.length > 6 ? `${name.slice(0, 5)}…` : name;
+}
+
+export default function ResultPage() {
   const navigate = useNavigate();
-  const result = location.state || FALLBACK_RESULT;
+  const location = useLocation();
+  const result = location.state || {};
+
+  const score = Number(result.score || 0);
+  const resultType = getGradeLabel(score, result.resultType || result.grade);
+  const resultMessage = getMessage(score, result.resultMessage);
+  const ctaText = result.ctaText || "와디즈 보러가기";
 
   const [rankings, setRankings] = useState([]);
-  const [saveStatus, setSaveStatus] = useState(API_BASE_URL ? "idle" : "disabled");
-  const [savedRecord, setSavedRecord] = useState(null);
-  const [saveMeta, setSaveMeta] = useState({ updated: false, previousScore: null, storedScore: null });
-
-  const payload = useMemo(
-    () => ({
-      nickname: result.nickname,
-      score: Number(result.score || 0),
-      grade: result.grade || result.resultType || "결과 없음",
-      cleanRate: 0,
-      irritation: 0,
-      moisture: 0,
-      balanceTime: 10,
-      scenarioSummary: result.scenarioSummary || "",
-    }),
-    [result]
-  );
+  const [saveMeta, setSaveMeta] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
+    let cancelled = false;
 
-    const saveAndFetch = async () => {
-      if (!API_BASE_URL || !payload.nickname) return;
-
+    async function saveAndLoad() {
       try {
-        setSaveStatus("saving");
-        const saveResponse = await axios.post(`${API_BASE_URL}/api/scores`, payload);
-        const saveBody = saveResponse?.data || {};
-        const stored = saveBody.data || null;
+        if (result.nickname && Number.isFinite(score)) {
+          const saveRes = await fetch("/api/scores", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nickname: result.nickname, score }),
+          });
 
-        if (!mounted) return;
-
-        setSavedRecord(stored);
-        setSaveMeta({
-          updated: Boolean(saveBody.updated),
-          previousScore: saveBody.previousScore ?? null,
-          storedScore: saveBody.storedScore ?? stored?.score ?? Number(result.score || 0),
-        });
-
-        const rankingResponse = await axios.get(`${API_BASE_URL}/api/rankings?limit=200`);
-        const rankingList = Array.isArray(rankingResponse.data) ? rankingResponse.data : [];
-        const sorted = [...rankingList].sort(compareRank);
-
-        if (!mounted) return;
-
-        setRankings(sorted);
-        if (!stored && result.nickname) {
-          const matched = sorted.find((item) => item.nickname === result.nickname);
-          if (matched) setSavedRecord(matched);
+          if (saveRes.ok) {
+            const saveJson = await saveRes.json();
+            if (!cancelled) setSaveMeta(saveJson);
+          }
         }
-        setSaveStatus("success");
+
+        const rankingRes = await fetch("/api/rankings?limit=5");
+        if (!rankingRes.ok) throw new Error("ranking fetch failed");
+        const rankingJson = await rankingRes.json();
+        if (!cancelled) {
+          setRankings(Array.isArray(rankingJson) ? rankingJson.sort(compareRank) : []);
+        }
       } catch (error) {
-        console.error("랭킹 저장/조회 실패", error);
-        if (mounted) setSaveStatus("error");
+        console.error(error);
+        if (!cancelled) setRankings([]);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    };
+    }
 
-    saveAndFetch();
+    saveAndLoad();
     return () => {
-      mounted = false;
+      cancelled = true;
     };
-  }, [API_BASE_URL, payload, result.nickname, result.score]);
+  }, [result.nickname, score]);
 
-  const topFive = useMemo(() => rankings.slice(0, 5), [rankings]);
-
-  const mySavedRank = useMemo(() => {
-    if (!savedRecord?.nickname || !rankings.length) return null;
-    const index = rankings.findIndex((item) => item.nickname === savedRecord.nickname);
-    return index >= 0 ? index + 1 : null;
-  }, [rankings, savedRecord]);
-
-  const rightCardTitle = saveStatus === "success" ? "내 저장 기록" : "내 기록";
-  const rightMainValue = savedRecord ? `${savedRecord.score}점` : `${Number(result.score || 0)}점`;
-  const footerMessage =
-    saveStatus === "success"
-      ? saveMeta.updated
-        ? `이번 ${result.score}점이 저장되어 최고 기록이 갱신됐어요.`
-        : saveMeta.previousScore != null && Number(result.score || 0) < Number(saveMeta.storedScore || 0)
-        ? `이번 ${result.score}점은 기존 최고 ${saveMeta.storedScore}점보다 낮아 랭킹은 유지됐어요.`
-        : "최고 점수 기준으로 랭킹이 저장됐어요."
-      : saveStatus === "error"
-      ? "랭킹 저장은 실패했지만 결과는 확인할 수 있어요."
-      : saveStatus === "disabled"
-      ? "API 연결 전이라 로컬 결과만 표시 중이에요."
-      : "랭킹 저장 중이에요.";
+  const rankingCaption = useMemo(() => {
+    if (!saveMeta) return "최고 점수 기준으로 랭킹이 저장돼요.";
+    if (saveMeta.updated) {
+      return `이번 기록 ${saveMeta.storedScore}점이 저장됐어요.`;
+    }
+    if (saveMeta.storedScore != null) {
+      return `기존 최고 점수 ${saveMeta.storedScore}점이 유지됐어요.`;
+    }
+    return "최고 점수 기준으로 랭킹이 저장돼요.";
+  }, [saveMeta]);
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.card}>
-        <div style={styles.headerRow}>
+      <div style={styles.shell}>
+        <div style={styles.topRow}>
           <div>
-            <div style={styles.eyebrow}>RESULT</div>
+            <div style={styles.kicker}>RESULT</div>
             <h1 style={styles.title}>게임 결과</h1>
           </div>
-          <div style={styles.scoreBox}>
+          <div style={styles.scoreCard}>
             <div style={styles.scoreLabel}>SCORE</div>
-            <div style={styles.scoreValue}>{result.score}</div>
+            <div style={styles.scoreValue}>{score}</div>
           </div>
         </div>
 
-        <div style={styles.typeBox}>
-          <div style={styles.typeLabel}>결과 유형</div>
-          <div style={styles.typeValue}>{result.resultType || result.grade}</div>
-          <div style={styles.typeDescription}>{result.resultMessage}</div>
-        </div>
+        <section style={styles.resultCard}>
+          <div style={styles.resultLabel}>결과 유형</div>
+          <div style={styles.resultType}>{resultType}</div>
+          <div style={styles.resultMessage}>{resultMessage}</div>
+        </section>
 
-        <div style={styles.compactGrid}>
-          <div style={styles.rankCard}>
-            <div style={styles.rankCardLabel}>TOP 5 랭킹</div>
+        <section style={styles.rankingCard}>
+          <div style={styles.rankingTitle}>TOP 5 랭킹</div>
+          {loading ? (
+            <div style={styles.emptyText}>랭킹 불러오는 중...</div>
+          ) : rankings.length === 0 ? (
+            <div style={styles.emptyText}>아직 저장된 랭킹이 없어요.</div>
+          ) : (
             <div style={styles.rankList}>
-              {topFive.length === 0 ? (
-                <div style={styles.emptyText}>아직 저장된 랭킹이 없어요.</div>
-              ) : (
-                topFive.map((item, index) => (
-                  <div key={`${item.nickname}-${index}`} style={styles.rankRow}>
-                    <div style={styles.rankNumber}>{index + 1}</div>
-                    <div style={styles.rankNicknameWrap}>
-                      <div style={styles.rankNickname}>{item.nickname}</div>
-                      <div style={styles.rankGrade}>{item.grade}</div>
+              {rankings.map((item, index) => (
+                <div key={`${item.nickname}-${item.score}-${index}`} style={styles.rankRow}>
+                  <div style={styles.rankLeft}>
+                    <div style={styles.rankBadge}>{index + 1}</div>
+                    <div style={styles.rankMeta}>
+                      <div style={styles.rankName}>{getDisplayName(item.nickname)}</div>
+                      <div style={styles.rankGrade}>{getGradeLabel(Number(item.score), item.grade)}</div>
                     </div>
-                    <div style={styles.rankScore}>{item.score}</div>
                   </div>
-                ))
-              )}
+                  <div style={styles.rankScore}>{Number(item.score)}</div>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
+        </section>
 
-          <div style={styles.myRankCard}>
-            <div style={styles.rankCardLabel}>{rightCardTitle}</div>
-            <div style={styles.myRankValue}>{rightMainValue}</div>
-            <div style={styles.myRankText}>{savedRecord?.nickname || result.nickname}</div>
-            <div style={styles.subInfo}>
-              {mySavedRank ? `저장 순위 ${mySavedRank}등 · 최고 점수 기준` : "랭킹 집계 중"}
-            </div>
-            <div style={styles.attemptInfo}>
-              이번 플레이 {result.score}점
-              {saveStatus === "success" && !saveMeta.updated && Number(saveMeta.storedScore || 0) > Number(result.score || 0)
-                ? ` · 저장 최고 ${saveMeta.storedScore}점 유지`
-                : saveStatus === "success"
-                ? " · 이번 점수 저장 완료"
-                : ""}
-            </div>
-          </div>
-        </div>
+        <div style={styles.caption}>{rankingCaption}</div>
 
-        <div style={styles.footerInfo}>{footerMessage}</div>
+        <button
+          type="button"
+          style={styles.ctaButton}
+          onClick={() => {
+            if (result.ctaHref) {
+              window.location.href = result.ctaHref;
+              return;
+            }
+            navigate("/");
+          }}
+        >
+          {ctaText}
+        </button>
 
-        <div style={styles.buttonGroup}>
-          <button style={styles.primaryButton} onClick={() => window.open(WADIZ_URL, "_blank", "noopener,noreferrer")}>
-            {result.ctaText || "와디즈 보러가기"}
-          </button>
-          <div style={styles.secondaryGrid}>
-            <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>전체 랭킹 보기</button>
-            <button
-              style={styles.secondaryButton}
-              onClick={() => {
-                window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-                navigate("/game");
-              }}
-            >
-              다시하기
-            </button>
-          </div>
-        </div>
+        <button type="button" style={styles.retryButton} onClick={() => navigate("/")}>
+          다시하기
+        </button>
       </div>
     </div>
   );
@@ -199,217 +161,188 @@ function ResultPage() {
 const styles = {
   wrapper: {
     minHeight: "100svh",
-    background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%)",
+    background: "linear-gradient(180deg, #edf3ff 0%, #f7fbff 100%)",
     padding: "10px",
     boxSizing: "border-box",
-    display: "flex",
-    alignItems: "center",
   },
-  card: {
-    width: "100%",
+  shell: {
     maxWidth: "520px",
+    minHeight: "calc(100svh - 20px)",
     margin: "0 auto",
-    background: "rgba(255,255,255,0.96)",
-    borderRadius: "28px",
-    padding: "16px",
-    boxShadow: "0 20px 48px rgba(15,23,42,0.1)",
-    border: "1px solid rgba(219,228,240,0.9)",
     display: "grid",
-    gap: "12px",
+    gap: "14px",
+    alignContent: "start",
   },
-  headerRow: {
-    display: "flex",
-    justifyContent: "space-between",
+  topRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr auto",
     gap: "12px",
-    alignItems: "flex-start",
+    alignItems: "start",
   },
-  eyebrow: {
-    fontSize: "12px",
+  kicker: {
+    color: "#4c6ef5",
+    fontSize: "18px",
     fontWeight: 900,
-    letterSpacing: "0.16em",
-    color: "#3b63e6",
+    letterSpacing: "0.18em",
     marginBottom: "6px",
   },
   title: {
     margin: 0,
-    fontSize: "32px",
-    lineHeight: 1,
     color: "#0f172a",
+    fontSize: "clamp(34px, 9vw, 58px)",
     fontWeight: 900,
+    letterSpacing: "-0.05em",
+    lineHeight: 1,
   },
-  scoreBox: {
-    minWidth: "118px",
-    borderRadius: "24px",
-    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-    padding: "14px 16px",
+  scoreCard: {
+    minWidth: "148px",
+    borderRadius: "30px",
+    padding: "18px 22px",
+    background: "linear-gradient(180deg, #0b1434 0%, #0f172a 100%)",
+    boxShadow: "0 18px 34px rgba(15,23,42,0.16)",
     textAlign: "center",
   },
   scoreLabel: {
-    color: "#9db6ff",
-    fontSize: "12px",
+    color: "#d1ddff",
+    fontSize: "13px",
     fontWeight: 900,
-    letterSpacing: "0.22em",
+    letterSpacing: "0.28em",
   },
   scoreValue: {
     marginTop: "6px",
-    color: "#f8e984",
-    fontSize: "58px",
+    color: "#f7e67a",
+    fontSize: "78px",
+    lineHeight: 0.95,
     fontWeight: 900,
-    lineHeight: 1,
     fontVariantNumeric: "tabular-nums",
   },
-  typeBox: {
-    borderRadius: "26px",
-    border: "1px solid #d8e2f4",
-    background: "#f8fbff",
-    padding: "18px",
+  resultCard: {
+    background: "rgba(255,255,255,0.98)",
+    borderRadius: "28px",
+    border: "1px solid #dbe5f3",
+    padding: "20px 22px",
+    boxShadow: "0 16px 38px rgba(15,23,42,0.06)",
   },
-  typeLabel: {
-    color: "#3b63e6",
+  resultLabel: {
+    color: "#4c6ef5",
+    fontSize: "18px",
     fontWeight: 900,
-    fontSize: "13px",
-    marginBottom: "8px",
-  },
-  typeValue: {
-    fontWeight: 900,
-    fontSize: "30px",
-    color: "#0f172a",
-    lineHeight: 1.15,
-  },
-  typeDescription: {
-    marginTop: "10px",
-    color: "#64748b",
-    fontSize: "16px",
-    lineHeight: 1.45,
-  },
-  compactGrid: {
-    display: "grid",
-    gridTemplateColumns: "1.1fr 0.9fr",
-    gap: "12px",
-  },
-  rankCard: {
-    borderRadius: "26px",
-    border: "1px solid #d8e2f4",
-    background: "#ffffff",
-    padding: "16px",
-  },
-  myRankCard: {
-    borderRadius: "26px",
-    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-    color: "#ffffff",
-    padding: "14px",
-    display: "grid",
-    alignContent: "start",
-  },
-  rankCardLabel: {
-    fontSize: "14px",
-    fontWeight: 900,
-    color: "inherit",
     marginBottom: "10px",
+  },
+  resultType: {
+    color: "#0f172a",
+    fontSize: "clamp(28px, 7.6vw, 46px)",
+    fontWeight: 900,
+    letterSpacing: "-0.05em",
+    lineHeight: 1.08,
+  },
+  resultMessage: {
+    marginTop: "16px",
+    color: "#6b7280",
+    fontSize: "18px",
+    lineHeight: 1.5,
+    fontWeight: 500,
+  },
+  rankingCard: {
+    background: "rgba(255,255,255,0.98)",
+    borderRadius: "28px",
+    border: "1px solid #dbe5f3",
+    padding: "20px 18px",
+    boxShadow: "0 16px 38px rgba(15,23,42,0.06)",
+  },
+  rankingTitle: {
+    color: "#111827",
+    fontSize: "22px",
+    fontWeight: 900,
+    marginBottom: "12px",
   },
   rankList: {
     display: "grid",
-    gap: "8px",
-  },
-  emptyText: {
-    color: "#64748b",
-    fontSize: "14px",
+    gap: "12px",
   },
   rankRow: {
     display: "grid",
-    gridTemplateColumns: "34px 1fr auto",
-    gap: "10px",
+    gridTemplateColumns: "1fr auto",
     alignItems: "center",
+    gap: "10px",
   },
-  rankNumber: {
-    width: "34px",
-    height: "34px",
-    borderRadius: "50%",
-    background: "#0f172a",
+  rankLeft: {
+    display: "grid",
+    gridTemplateColumns: "58px 1fr",
+    alignItems: "center",
+    gap: "12px",
+    minWidth: 0,
+  },
+  rankBadge: {
+    width: "54px",
+    height: "54px",
+    borderRadius: "999px",
+    background: "#0b1434",
     color: "#ffffff",
     display: "grid",
     placeItems: "center",
+    fontSize: "28px",
     fontWeight: 900,
+    fontVariantNumeric: "tabular-nums",
   },
-  rankNicknameWrap: {
+  rankMeta: {
     minWidth: 0,
   },
-  rankNickname: {
-    color: "#0f172a",
-    fontWeight: 800,
-    fontSize: "18px",
+  rankName: {
+    color: "#111827",
+    fontSize: "clamp(20px, 5.5vw, 34px)",
+    fontWeight: 900,
+    lineHeight: 1.05,
+    letterSpacing: "-0.04em",
+    whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   rankGrade: {
-    color: "#64748b",
-    fontSize: "13px",
-    marginTop: "2px",
+    marginTop: "6px",
+    color: "#8a94a6",
+    fontSize: "clamp(14px, 4.2vw, 24px)",
+    lineHeight: 1.2,
+    fontWeight: 700,
   },
   rankScore: {
-    color: "#3b63e6",
+    color: "#4c6ef5",
+    fontSize: "clamp(24px, 7vw, 44px)",
     fontWeight: 900,
-    fontSize: "20px",
-  },
-  myRankValue: {
-    color: "#f7d548",
-    fontSize: "54px",
     lineHeight: 1,
-    fontWeight: 900,
-    margin: "8px 0 10px",
+    fontVariantNumeric: "tabular-nums",
+    paddingLeft: "8px",
   },
-  myRankText: {
-    fontWeight: 800,
-    fontSize: "19px",
-    marginBottom: "8px",
-  },
-  subInfo: {
-    color: "#cbd5e1",
-    fontSize: "14px",
-    lineHeight: 1.45,
-    wordBreak: "keep-all",
-  },
-  attemptInfo: {
-    marginTop: "12px",
-    color: "#93c5fd",
-    fontSize: "14px",
+  emptyText: {
+    color: "#6b7280",
+    fontSize: "16px",
     lineHeight: 1.5,
-    wordBreak: "keep-all",
+    padding: "8px 2px 2px",
   },
-  footerInfo: {
-    color: "#64748b",
-    fontSize: "13px",
+  caption: {
     textAlign: "center",
+    color: "#8a94a6",
+    fontSize: "16px",
+    fontWeight: 700,
+    lineHeight: 1.5,
   },
-  buttonGroup: {
-    display: "grid",
-    gap: "10px",
-  },
-  primaryButton: {
-    width: "100%",
-    padding: "16px 18px",
+  ctaButton: {
     border: "none",
-    borderRadius: "20px",
-    background: "linear-gradient(90deg, #0f172a 0%, #1d4ed8 100%)",
+    borderRadius: "26px",
+    minHeight: "82px",
+    background: "linear-gradient(90deg, #0b1434 0%, #3152e7 100%)",
     color: "#ffffff",
-    fontSize: "17px",
+    fontSize: "28px",
     fontWeight: 900,
+    boxShadow: "0 16px 32px rgba(49,82,231,0.22)",
   },
-  secondaryGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "10px",
-  },
-  secondaryButton: {
-    width: "100%",
-    padding: "14px 12px",
-    borderRadius: "18px",
-    border: "1px solid #dbe4f0",
+  retryButton: {
+    border: "1px solid #d4deed",
+    borderRadius: "22px",
+    minHeight: "58px",
     background: "#ffffff",
     color: "#0f172a",
+    fontSize: "18px",
     fontWeight: 800,
   },
 };
-
-export default ResultPage;
