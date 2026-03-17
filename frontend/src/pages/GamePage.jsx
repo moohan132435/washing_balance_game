@@ -514,7 +514,7 @@ function GamePage() {
             })}
           </div>
 
-          <div style={styles.legendRow}>
+          {/* <div style={styles.legendRow}>
             <div style={styles.legendItem}>
               <span style={{ ...styles.legendDot, background: "#ef4444" }} /> 화농성
             </div>
@@ -524,7 +524,7 @@ function GamePage() {
             <div style={styles.legendItem}>
               <span style={{ ...styles.legendDot, background: "#3b82f6" }} /> 해결됨
             </div>
-          </div>
+          </div> */}
 
           <div style={styles.bottomHint}>{statusMessage}</div>
         </div>

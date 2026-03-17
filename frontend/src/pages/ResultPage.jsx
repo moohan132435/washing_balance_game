@@ -50,24 +50,40 @@ export default function ResultPage() {
           const saveRes = await fetch("/api/scores", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nickname: result.nickname, score }),
+            body: JSON.stringify({
+              nickname: result.nickname,
+              score,
+              grade: resultType,
+              scenarioSummary: result.scenarioSummary || "",
+              cleanRate: result.careStats?.cleanRate || 0,
+              irritation: result.careStats?.irritation || 0,
+              moisture: result.careStats?.moisture || 0,
+              balanceTime: result.careStats?.balanceTime || 0,
+            }),
           });
 
-          if (saveRes.ok) {
-            const saveJson = await saveRes.json();
-            if (!cancelled) setSaveMeta(saveJson);
+          const saveJson = await saveRes.json().catch(() => null);
+          if (!saveRes.ok) {
+            throw new Error(saveJson?.message || "score save failed");
           }
+          if (!cancelled) setSaveMeta(saveJson);
         }
 
         const rankingRes = await fetch("/api/rankings?limit=5");
-        if (!rankingRes.ok) throw new Error("ranking fetch failed");
-        const rankingJson = await rankingRes.json();
+        const rankingJson = await rankingRes.json().catch(() => []);
+        if (!rankingRes.ok) {
+          throw new Error(rankingJson?.message || "ranking fetch failed");
+        }
+
         if (!cancelled) {
           setRankings(Array.isArray(rankingJson) ? rankingJson.sort(compareRank) : []);
         }
       } catch (error) {
         console.error(error);
-        if (!cancelled) setRankings([]);
+        if (!cancelled) {
+          setSaveMeta((prev) => prev || { ok: false, message: error.message || "랭킹 저장에 실패했어요." });
+          setRankings([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -77,18 +93,16 @@ export default function ResultPage() {
     return () => {
       cancelled = true;
     };
-  }, [result.nickname, score]);
+  }, [result.nickname, score, resultType, result.scenarioSummary, result.careStats]);
 
   const rankingCaption = useMemo(() => {
+    if (loading) return "랭킹 저장 및 불러오는 중이에요.";
+    if (saveMeta?.ok === false) return saveMeta.message || "랭킹 저장에 실패했어요.";
     if (!saveMeta) return "최고 점수 기준으로 랭킹이 저장돼요.";
-    if (saveMeta.updated) {
-      return `이번 기록 ${saveMeta.storedScore}점이 저장됐어요.`;
-    }
-    if (saveMeta.storedScore != null) {
-      return `기존 최고 점수 ${saveMeta.storedScore}점이 유지됐어요.`;
-    }
+    if (saveMeta.updated) return `이번 기록 ${saveMeta.storedScore}점이 랭킹에 저장됐어요.`;
+    if (saveMeta.storedScore != null) return `기존 최고 점수 ${saveMeta.storedScore}점이 유지됐어요.`;
     return "최고 점수 기준으로 랭킹이 저장돼요.";
-  }, [saveMeta]);
+  }, [loading, saveMeta]);
 
   return (
     <div style={styles.wrapper}>
@@ -153,6 +167,10 @@ export default function ResultPage() {
         <button type="button" style={styles.retryButton} onClick={() => navigate("/")}>
           다시하기
         </button>
+
+        <button type="button" style={styles.rankingsButton} onClick={() => navigate("/ranking")}>
+          전체 랭킹 보기
+        </button>
       </div>
     </div>
   );
@@ -197,7 +215,7 @@ const styles = {
   scoreCard: {
     minWidth: "148px",
     borderRadius: "30px",
-    padding: "18px 22px",
+    padding: "14px 22px",
     background: "linear-gradient(180deg, #0b1434 0%, #0f172a 100%)",
     boxShadow: "0 18px 34px rgba(15,23,42,0.16)",
     textAlign: "center",
@@ -209,10 +227,10 @@ const styles = {
     letterSpacing: "0.28em",
   },
   scoreValue: {
-    marginTop: "6px",
+    marginTop: "4px",
     color: "#f7e67a",
-    fontSize: "78px",
-    lineHeight: 0.95,
+    fontSize: "72px",
+    lineHeight: 0.92,
     fontWeight: 900,
     fontVariantNumeric: "tabular-nums",
   },
@@ -231,13 +249,13 @@ const styles = {
   },
   resultType: {
     color: "#0f172a",
-    fontSize: "clamp(28px, 7.6vw, 46px)",
+    fontSize: "clamp(24px, 6.4vw, 38px)",
     fontWeight: 900,
     letterSpacing: "-0.05em",
-    lineHeight: 1.08,
+    lineHeight: 1.12,
   },
   resultMessage: {
-    marginTop: "16px",
+    marginTop: "14px",
     color: "#6b7280",
     fontSize: "18px",
     lineHeight: 1.5,
@@ -328,11 +346,11 @@ const styles = {
   },
   ctaButton: {
     border: "none",
-    borderRadius: "26px",
-    minHeight: "82px",
+    borderRadius: "24px",
+    minHeight: "70px",
     background: "linear-gradient(90deg, #0b1434 0%, #3152e7 100%)",
     color: "#ffffff",
-    fontSize: "28px",
+    fontSize: "24px",
     fontWeight: 900,
     boxShadow: "0 16px 32px rgba(49,82,231,0.22)",
   },
@@ -342,6 +360,15 @@ const styles = {
     minHeight: "58px",
     background: "#ffffff",
     color: "#0f172a",
+    fontSize: "18px",
+    fontWeight: 800,
+  },
+  rankingsButton: {
+    border: "1px solid #d4deed",
+    borderRadius: "22px",
+    minHeight: "58px",
+    background: "#f8fbff",
+    color: "#3152e7",
     fontSize: "18px",
     fontWeight: 800,
   },
