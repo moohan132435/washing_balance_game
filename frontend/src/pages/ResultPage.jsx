@@ -1,9 +1,16 @@
 import axios from "axios";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const RAW_API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 const WADIZ_URL = import.meta.env.VITE_WADIZ_URL || "https://www.wadiz.kr";
+const RAW_BASE_CANDIDATES = [
+  import.meta.env.VITE_API_BASE_URL,
+  import.meta.env.VITE_BACKEND_URL,
+  import.meta.env.VITE_API_URL,
+  "",
+]
+  .map((v) => (typeof v === "string" ? v.trim().replace(/\/$/, "") : ""))
+  .filter((v, i, arr) => v || i === arr.lastIndexOf(v));
 
 const FALLBACK_RESULT = {
   nickname: localStorage.getItem("nickname") || "PLAYER",
@@ -16,10 +23,6 @@ const FALLBACK_RESULT = {
   currentAttemptAt: new Date().toISOString(),
 };
 
-function apiUrl(path) {
-  return RAW_API_BASE_URL ? `${RAW_API_BASE_URL}${path}` : path;
-}
-
 function compareRank(a, b) {
   const scoreGap = Number(b.score || 0) - Number(a.score || 0);
   if (scoreGap !== 0) return scoreGap;
@@ -29,19 +32,50 @@ function compareRank(a, b) {
   return aTime - bTime;
 }
 
+function buildCandidates(path) {
+  const candidates = RAW_BASE_CANDIDATES.map((base) => (base ? `${base}${path}` : path));
+  return [...new Set(candidates)];
+}
+
+async function requestWithFallback(method, path, config = {}) {
+  const candidates = buildCandidates(path);
+  let lastError = null;
+
+  for (const url of candidates) {
+    try {
+      const response = await axios({
+        method,
+        url,
+        timeout: 12000,
+        ...config,
+      });
+      return response;
+    } catch (error) {
+      lastError = error;
+
+      const status = error?.response?.status;
+      if (status && status < 500 && status !== 404) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error("request failed");
+}
+
 function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const result = location.state || FALLBACK_RESULT;
 
   const [rankings, setRankings] = useState([]);
-  const [saveStatus, setSaveStatus] = useState("idle");
   const [footerMessage, setFooterMessage] = useState("결과를 저장하는 중이에요.");
-  const [hasSavedOnce, setHasSavedOnce] = useState(false);
+  const [isSaving, setIsSaving] = useState(true);
+  const didRunRef = useRef(false);
 
   const payload = useMemo(
     () => ({
-      nickname: String(result.nickname || localStorage.getItem("nickname") || "PLAYER").trim(),
+      nickname: String(result.nickname || localStorage.getItem("nickname") || "PLAYER").trim().slice(0, 30),
       score: Number(result.score || 0),
       grade: result.grade || result.resultType || "결과 없음",
       resultType: result.resultType || result.grade || "결과 없음",
@@ -50,7 +84,7 @@ function ResultPage() {
       cleanRate: Number(result.cleanRate || 0),
       irritation: Number(result.irritation || 0),
       moisture: Number(result.moisture || 0),
-      balanceTime: Number(result.balanceTime || 10),
+      balanceTime: Number(result.balanceTime || 0),
       currentAttemptAt: result.currentAttemptAt || new Date().toISOString(),
     }),
     [result]
@@ -58,64 +92,62 @@ function ResultPage() {
 
   useEffect(() => {
     let cancelled = false;
+    if (didRunRef.current) return;
+    didRunRef.current = true;
 
-    const saveAndFetch = async () => {
-      if (hasSavedOnce) return;
-      setSaveStatus("saving");
-      setFooterMessage("결과를 저장하는 중이에요.");
-
+    const run = async () => {
+      setIsSaving(true);
       try {
-        await axios.post(apiUrl("/api/scores"), payload, {
+        const saveResponse = await requestWithFallback("post", "/api/scores", {
+          data: payload,
           headers: { "Content-Type": "application/json" },
-          timeout: 10000,
         });
 
         if (cancelled) return;
-        setSaveStatus("success");
-        setHasSavedOnce(true);
-        setFooterMessage("최고 점수 기준으로 랭킹이 저장됐어요.");
+
+        const saveData = saveResponse?.data || {};
+        setFooterMessage(saveData.message || "최고 점수 기준으로 랭킹이 저장됐어요.");
       } catch (error) {
         if (cancelled) return;
         console.error("score save failed", error);
-        setSaveStatus("error");
-
         const serverMessage =
           error?.response?.data?.message ||
           error?.response?.data?.error ||
           error?.message ||
           "랭킹 저장에 실패했어요.";
-
         setFooterMessage(serverMessage);
       }
 
       try {
-        const response = await axios.get(apiUrl("/api/rankings?limit=5"), {
-          timeout: 10000,
-        });
-
+        const rankingResponse = await requestWithFallback("get", "/api/rankings?limit=5");
         if (cancelled) return;
-        const list = Array.isArray(response.data) ? response.data : [];
+        const list = Array.isArray(rankingResponse?.data) ? rankingResponse.data : [];
         setRankings([...list].sort(compareRank).slice(0, 5));
       } catch (error) {
         if (cancelled) return;
         console.error("ranking fetch failed", error);
-        if (saveStatus !== "error") {
-          setFooterMessage("랭킹은 저장됐지만 조회에 실패했어요.");
-        }
+        const serverMessage =
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.message ||
+          "랭킹 조회에 실패했어요.";
+        setFooterMessage((prev) => prev === "결과를 저장하는 중이에요." ? serverMessage : `${prev} / ${serverMessage}`);
+      } finally {
+        if (!cancelled) setIsSaving(false);
       }
     };
 
-    saveAndFetch();
+    run();
     return () => {
       cancelled = true;
     };
-  }, [hasSavedOnce, payload, saveStatus]);
+  }, [payload]);
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.card}>
         <div style={styles.headerRow}>
-          <div>
+          <div style={styles.titleWrap}>
             <div style={styles.eyebrow}>RESULT</div>
             <h1 style={styles.title}>게임 결과</h1>
           </div>
@@ -151,10 +183,11 @@ function ResultPage() {
           </div>
         </div>
 
-        <div style={styles.footerInfo}>{footerMessage}</div>
+        <div style={styles.footerInfo}>{isSaving ? "결과를 저장하는 중이에요." : footerMessage}</div>
 
         <div style={styles.buttonGroup}>
           <button
+            type="button"
             style={styles.primaryButton}
             onClick={() => window.open(WADIZ_URL, "_blank", "noopener,noreferrer")}
           >
@@ -162,8 +195,9 @@ function ResultPage() {
           </button>
 
           <div style={styles.secondaryGrid}>
-            <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>전체 랭킹 보기</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => navigate("/ranking")}>전체 랭킹 보기</button>
             <button
+              type="button"
               style={styles.secondaryButton}
               onClick={() => {
                 window.scrollTo({ top: 0, left: 0, behavior: "auto" });
@@ -185,11 +219,12 @@ const styles = {
     background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%)",
     padding: "10px",
     boxSizing: "border-box",
+    overflowX: "hidden",
   },
   card: {
-    width: "100%",
-    maxWidth: "520px",
+    width: "min(520px, calc(100vw - 20px))",
     margin: "0 auto",
+    boxSizing: "border-box",
     background: "rgba(255,255,255,0.96)",
     borderRadius: "28px",
     padding: "16px",
@@ -199,10 +234,13 @@ const styles = {
     gap: "14px",
   },
   headerRow: {
-    display: "flex",
-    justifyContent: "space-between",
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
     gap: "12px",
-    alignItems: "flex-start",
+    alignItems: "start",
+  },
+  titleWrap: {
+    minWidth: 0,
   },
   eyebrow: {
     fontSize: "12px",
@@ -213,13 +251,14 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: "32px",
+    fontSize: "clamp(28px, 7vw, 42px)",
     lineHeight: 1,
     color: "#0f172a",
     fontWeight: 900,
+    wordBreak: "keep-all",
   },
   scoreBox: {
-    minWidth: "120px",
+    minWidth: "118px",
     borderRadius: "24px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
     padding: "10px 14px",
@@ -253,7 +292,7 @@ const styles = {
   },
   typeValue: {
     color: "#0f172a",
-    fontSize: "24px",
+    fontSize: "22px",
     lineHeight: 1.2,
     fontWeight: 900,
     marginBottom: "8px",
@@ -286,7 +325,7 @@ const styles = {
   },
   rankRow: {
     display: "grid",
-    gridTemplateColumns: "38px 1fr auto",
+    gridTemplateColumns: "38px minmax(0, 1fr) auto",
     gap: "10px",
     alignItems: "center",
   },
@@ -299,6 +338,7 @@ const styles = {
     display: "grid",
     placeItems: "center",
     fontWeight: 900,
+    flexShrink: 0,
   },
   rankNicknameWrap: {
     minWidth: 0,
@@ -338,7 +378,7 @@ const styles = {
     borderRadius: "22px",
     background: "linear-gradient(90deg, #0f1c59 0%, #3b54e6 100%)",
     color: "#ffffff",
-    padding: "20px 18px",
+    padding: "18px 18px",
     fontSize: "18px",
     fontWeight: 900,
     cursor: "pointer",
