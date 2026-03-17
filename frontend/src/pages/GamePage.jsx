@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const TOTAL_TIME = 10;
@@ -8,15 +8,16 @@ const FACE_SRC = {
 };
 
 const SPOT_BLUEPRINTS = [
-  { id: "spot-1", x: 51, y: 25, type: "inflamed" },
-  { id: "spot-2", x: 38, y: 37, type: "nonInflamed" },
-  { id: "spot-3", x: 61, y: 41, type: "inflamed" },
-  { id: "spot-4", x: 46, y: 52, type: "nonInflamed" },
-  { id: "spot-5", x: 57, y: 57, type: "inflamed" },
+  { id: "spot-1", x: 50, y: 32, type: "inflamed" },
+  { id: "spot-2", x: 38, y: 42, type: "nonInflamed" },
+  { id: "spot-3", x: 61, y: 46, type: "inflamed" },
+  { id: "spot-4", x: 46, y: 55, type: "nonInflamed" },
+  { id: "spot-5", x: 58, y: 60, type: "inflamed" },
+  { id: "spot-6", x: 41, y: 61, type: "nonInflamed" },
 ];
 
 const TOOL_META = {
-  wash: { label: "세안", sub: "기본", bg: "#f8fafc", color: "#0f172a", border: "#cbd5e1" },
+  wash: { label: "세안", sub: "문지르기", bg: "#ffffff", color: "#0f172a", border: "#cbd5e1" },
   ointment: { label: "연고", sub: "진정", bg: "#3d63eb", color: "#ffffff", border: "#3d63eb" },
   patch: { label: "패치", sub: "보호", bg: "#f1cc4a", color: "#111827", border: "#f1cc4a" },
   squeeze: { label: "압출", sub: "짜기", bg: "#e74c42", color: "#ffffff", border: "#e74c42" },
@@ -36,11 +37,8 @@ function buildSpots() {
       resolved: false,
       wrongCount: 0,
       actionLog: [],
+      washProgress: 0,
     }));
-}
-
-function getSpotLabel(type) {
-  return type === "inflamed" ? "화농성" : "비화농성";
 }
 
 function getResultType(score) {
@@ -58,7 +56,7 @@ function getResultMessage(score) {
 }
 
 function computeScore(spots, timeLeft) {
-  let score = 24;
+  let score = 20;
   let correct = 0;
   let partial = 0;
   let wrong = 0;
@@ -69,22 +67,20 @@ function computeScore(spots, timeLeft) {
 
     if (spot.type === "inflamed") {
       if (spot.treated) {
-        score += 20;
-        correct += 1;
-      }
-      if (spot.patched) {
-        score += 10;
+        score += 18;
         partial += 1;
       }
-      if (spot.resolved) {
-        resolved += 1;
+      if (spot.patched) {
+        score += 14;
+        correct += 1;
       }
+      if (spot.resolved) resolved += 1;
     } else {
       if (spot.resolved) {
-        score += 24;
+        score += 26;
         correct += 1;
         resolved += 1;
-      } else if (spot.actionLog.includes("ointment")) {
+      } else if (spot.washProgress >= 1) {
         score += 8;
         partial += 1;
       }
@@ -94,23 +90,102 @@ function computeScore(spots, timeLeft) {
   score -= wrong * 8;
   score += Math.max(0, Math.min(8, timeLeft));
   score = Math.max(0, Math.min(100, score));
-
   return { score, correct, partial, wrong, resolved };
+}
+
+function getSpotView(spot) {
+  if (spot.resolved) {
+    return {
+      size: 12,
+      color: "rgba(59,130,246,0.95)",
+      ring: "0 0 0 4px rgba(191,219,254,0.5)",
+      label: "✓",
+      textColor: "#ffffff",
+    };
+  }
+
+  if (spot.type === "inflamed") {
+    if (spot.patched) {
+      return {
+        size: 16,
+        color: "rgba(59,130,246,0.98)",
+        ring: "0 0 0 4px rgba(147,197,253,0.45)",
+        label: "",
+        textColor: "#ffffff",
+      };
+    }
+    if (spot.treated) {
+      return {
+        size: 18,
+        color: "rgba(245,158,11,0.95)",
+        ring: "0 0 0 4px rgba(253,230,138,0.42)",
+        label: "",
+        textColor: "#ffffff",
+      };
+    }
+    return {
+      size: 20,
+      color: "rgba(239,68,68,0.94)",
+      ring: "0 0 0 4px rgba(254,202,202,0.42)",
+      label: "",
+      textColor: "#ffffff",
+    };
+  }
+
+  if (spot.washProgress >= 2) {
+    return {
+      size: 12,
+      color: "rgba(59,130,246,0.95)",
+      ring: "0 0 0 4px rgba(191,219,254,0.5)",
+      label: "✓",
+      textColor: "#ffffff",
+    };
+  }
+
+  if (spot.washProgress === 1) {
+    return {
+      size: 15,
+      color: "rgba(250,204,21,0.92)",
+      ring: "0 0 0 4px rgba(254,240,138,0.34)",
+      label: "",
+      textColor: "#111827",
+    };
+  }
+
+  return {
+    size: 18,
+    color: "rgba(245,158,11,0.92)",
+    ring: "0 0 0 4px rgba(254,240,138,0.34)",
+    label: "",
+    textColor: "#111827",
+  };
+}
+
+function getPointerPosition(event, element) {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  const point = "touches" in event && event.touches[0] ? event.touches[0] : event;
+  const x = ((point.clientX - rect.left) / rect.width) * 100;
+  const y = ((point.clientY - rect.top) / rect.height) * 100;
+  return { x, y };
 }
 
 function GamePage() {
   const navigate = useNavigate();
+  const faceStageRef = useRef(null);
+  const rubLockRef = useRef(new Map());
+  const [isRubbing, setIsRubbing] = useState(false);
   const nickname = localStorage.getItem("nickname") || "PLAYER";
   const selectedFaceKey = localStorage.getItem("selectedFaceKey");
-  const [faceKey] = useState(() => (selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : Math.random() < 0.5 ? "male" : "female"));
+  const [faceKey] = useState(() => (selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female"));
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const [selectedTool, setSelectedTool] = useState("wash");
   const [spots, setSpots] = useState(() => buildSpots());
-  const [statusMessage, setStatusMessage] = useState("버튼을 고르고 여드름을 눌러 관리해보세요.");
+  const [statusMessage, setStatusMessage] = useState("세안은 얼굴을 문질러서, 연고·패치·압출은 스팟을 눌러서 진행해보세요.");
   const [finished, setFinished] = useState(false);
+  const [foamPoints, setFoamPoints] = useState([]);
 
   const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved).length, [spots]);
-  const inflamedCount = useMemo(() => spots.filter((spot) => spot.type === "inflamed").length, [spots]);
   const faceSrc = FACE_SRC[faceKey] || FACE_SRC.female;
 
   useEffect(() => {
@@ -153,7 +228,6 @@ function GamePage() {
           ctaText: "와디즈 보러가기",
           careStats: {
             totalSpots: spots.length,
-            inflamedCount,
             resolved,
             correct,
             partial,
@@ -163,10 +237,79 @@ function GamePage() {
         },
       });
     }
-  }, [finished, inflamedCount, navigate, nickname, spots, timeLeft, unresolvedCount]);
+  }, [finished, navigate, nickname, spots, timeLeft, unresolvedCount]);
+
+  useEffect(() => {
+    if (!foamPoints.length) return undefined;
+    const timer = window.setTimeout(() => {
+      setFoamPoints((prev) => prev.slice(-6));
+    }, 220);
+    return () => window.clearTimeout(timer);
+  }, [foamPoints]);
+
+  const applyWash = (position) => {
+    if (!position) return;
+
+    const faceCenterX = 50;
+    const faceCenterY = 52;
+    const faceRadiusX = 26;
+    const faceRadiusY = 33;
+    const normX = (position.x - faceCenterX) / faceRadiusX;
+    const normY = (position.y - faceCenterY) / faceRadiusY;
+    const insideFace = normX * normX + normY * normY <= 1;
+
+    if (!insideFace) return;
+
+    setFoamPoints((prev) => [...prev.slice(-10), { ...position, id: `${Date.now()}-${Math.random()}` }]);
+
+    setSpots((prev) =>
+      prev.map((spot) => {
+        if (spot.resolved) return spot;
+
+        const distance = Math.hypot(position.x - spot.x, position.y - spot.y);
+        const lockKey = `${spot.id}-${Math.round(position.x)}-${Math.round(position.y)}`;
+        if (distance > 7 || rubLockRef.current.has(lockKey)) return spot;
+        rubLockRef.current.set(lockKey, true);
+        window.setTimeout(() => rubLockRef.current.delete(lockKey), 120);
+
+        if (spot.type === "nonInflamed") {
+          const nextProgress = Math.min(2, spot.washProgress + 1);
+          const nextSpot = {
+            ...spot,
+            actionLog: [...spot.actionLog, "wash"],
+            washProgress: nextProgress,
+            resolved: nextProgress >= 2,
+          };
+          setStatusMessage(nextProgress >= 2 ? "비화농성 트러블이 세안으로 정리됐어요." : "좋아요. 조금 더 부드럽게 문질러보세요.");
+          return nextSpot;
+        }
+
+        setStatusMessage("붉은 화농성은 세안만으로 끝내기보다 진정 관리가 먼저예요.");
+        return {
+          ...spot,
+          actionLog: [...spot.actionLog, "wash"],
+        };
+      })
+    );
+  };
+
+  const handleRubStart = (event) => {
+    if (selectedTool !== "wash" || finished || timeLeft === 0) return;
+    setIsRubbing(true);
+    applyWash(getPointerPosition(event, faceStageRef.current));
+  };
+
+  const handleRubMove = (event) => {
+    if (!isRubbing || selectedTool !== "wash" || finished || timeLeft === 0) return;
+    applyWash(getPointerPosition(event, faceStageRef.current));
+  };
+
+  const handleRubEnd = () => {
+    setIsRubbing(false);
+  };
 
   const handleSpotClick = (spotId) => {
-    if (finished || timeLeft === 0) return;
+    if (finished || timeLeft === 0 || selectedTool === "wash") return;
 
     let nextMessage = "";
 
@@ -182,7 +325,7 @@ function GamePage() {
         if (spot.type === "inflamed") {
           if (selectedTool === "ointment") {
             nextSpot.treated = true;
-            nextMessage = "화농성은 먼저 진정시키는 선택이 좋아요.";
+            nextMessage = "좋아요. 화농성은 먼저 진정 단계로 들어갔어요.";
             return nextSpot;
           }
 
@@ -194,88 +337,100 @@ function GamePage() {
               return nextSpot;
             }
             nextSpot.wrongCount += 1;
-            nextMessage = "화농성은 바로 패치보다 진정부터 보는 편이 좋아요.";
+            nextMessage = "화농성은 패치 전에 진정 단계가 먼저예요.";
             return nextSpot;
           }
 
           nextSpot.wrongCount += 1;
-          nextMessage = selectedTool === "squeeze"
-            ? "붉은 화농성은 압출보다 진정이 먼저예요."
-            : "붉은 화농성은 세안만으로 끝내기 어려워요.";
-          return nextSpot;
-        }
-
-        if (selectedTool === "wash") {
-          nextSpot.resolved = true;
-          nextMessage = "비화농성은 자극 없이 씻어내는 접근이 먼저예요.";
+          nextMessage = "붉은 화농성은 바로 압출하기보다 진정부터 보는 편이 좋아요.";
           return nextSpot;
         }
 
         if (selectedTool === "ointment") {
-          nextMessage = "연고도 가능하지만, 비화농성은 세안 우선이 더 좋아요.";
+          nextSpot.wrongCount += 1;
+          nextMessage = "비화농성은 연고보다 세안으로 부드럽게 정리하는 흐름이 좋아요.";
+          return nextSpot;
+        }
+
+        if (selectedTool === "patch") {
+          nextSpot.wrongCount += 1;
+          nextMessage = "비화농성은 패치보다 세안이 우선이에요.";
           return nextSpot;
         }
 
         nextSpot.wrongCount += 1;
-        nextMessage = selectedTool === "squeeze"
-          ? "작은 막힘은 바로 짜기보다 세안으로 먼저 풀어보세요."
-          : "비화농성에는 패치보다 세안이 더 알맞아요.";
+        nextMessage = "비화농성은 압출보다 세안으로 정리해보세요.";
         return nextSpot;
       })
     );
 
-    if (nextMessage) {
-      setStatusMessage(nextMessage);
-    }
+    if (nextMessage) setStatusMessage(nextMessage);
   };
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.shell}>
-        <div style={styles.headerRow}>
+        <div style={styles.topRow}>
           <button type="button" style={styles.closeButton} onClick={() => navigate("/")}>✕</button>
-          <div style={styles.progressText}>남은 트러블 {unresolvedCount}개</div>
+          <div style={styles.smallStatus}>남은 트러블 {unresolvedCount}개</div>
         </div>
 
         <div style={styles.stageCard}>
-          <div style={styles.timerBox}>
-            <div style={styles.timerLabel}>TIME</div>
-            <div style={styles.timerValue}>{String(timeLeft).padStart(2, "0")}</div>
-          </div>
-
-          <div style={styles.titleWrap}>
-            <div style={styles.stateBadge}>{inflamedCount > 0 ? "화농성 포함" : "비화농성 위주"}</div>
+          <div style={styles.titleRow}>
             <h1 style={styles.title}>이 여드름, 어떻게 할까?</h1>
-            <p style={styles.subtitle}>버튼을 고른 뒤 얼굴 위 트러블을 눌러 직접 관리해보세요.</p>
           </div>
 
-          <div style={styles.faceStage}>
-            <img src={faceSrc} alt="게임 얼굴" style={styles.faceImage} />
-            {spots.map((spot) => (
-              <button
-                key={spot.id}
-                type="button"
-                onClick={() => handleSpotClick(spot.id)}
+          <div
+            ref={faceStageRef}
+            style={styles.faceStage}
+            onMouseDown={handleRubStart}
+            onMouseMove={handleRubMove}
+            onMouseUp={handleRubEnd}
+            onMouseLeave={handleRubEnd}
+            onTouchStart={handleRubStart}
+            onTouchMove={handleRubMove}
+            onTouchEnd={handleRubEnd}
+          >
+            <div style={styles.timerBox}>
+              <div style={styles.timerLabel}>TIME</div>
+              <div style={styles.timerValue}>{String(timeLeft).padStart(2, "0")}</div>
+            </div>
+            <img src={faceSrc} alt="게임 얼굴" style={styles.faceImage} draggable={false} />
+
+            {foamPoints.map((point) => (
+              <span
+                key={point.id}
                 style={{
-                  ...styles.spotButton,
-                  left: `${spot.x}%`,
-                  top: `${spot.y}%`,
-                  background: spot.resolved
-                    ? "rgba(59,130,246,0.22)"
-                    : spot.type === "inflamed"
-                    ? "rgba(239,68,68,0.92)"
-                    : "rgba(245,158,11,0.92)",
-                  boxShadow: spot.resolved
-                    ? "0 0 0 6px rgba(191,219,254,0.36)"
-                    : spot.type === "inflamed"
-                    ? "0 0 0 6px rgba(254,202,202,0.34)"
-                    : "0 0 0 6px rgba(254,240,138,0.34)",
+                  ...styles.foamDot,
+                  left: `${point.x}%`,
+                  top: `${point.y}%`,
                 }}
-                aria-label={`${getSpotLabel(spot.type)} 트러블`}
-              >
-                {spot.resolved ? "✓" : ""}
-              </button>
+              />
             ))}
+
+            {spots.map((spot) => {
+              const view = getSpotView(spot);
+              return (
+                <button
+                  key={spot.id}
+                  type="button"
+                  onClick={() => handleSpotClick(spot.id)}
+                  style={{
+                    ...styles.spotButton,
+                    width: `${view.size}px`,
+                    height: `${view.size}px`,
+                    left: `${spot.x}%`,
+                    top: `${spot.y}%`,
+                    background: view.color,
+                    boxShadow: view.ring,
+                    color: view.textColor,
+                  }}
+                  aria-label={spot.type === "inflamed" ? "화농성 트러블" : "비화농성 트러블"}
+                >
+                  {view.label}
+                </button>
+              );
+            })}
           </div>
 
           <div style={styles.legendRow}>
@@ -283,8 +438,6 @@ function GamePage() {
             <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#f59e0b" }} /> 비화농성</div>
             <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#3b82f6" }} /> 해결됨</div>
           </div>
-
-          <div style={styles.statusBox}>{statusMessage}</div>
         </div>
 
         <div style={styles.toolGrid}>
@@ -309,6 +462,8 @@ function GamePage() {
             );
           })}
         </div>
+
+        <div style={styles.bottomHint}>{statusMessage}</div>
       </div>
     </div>
   );
@@ -326,131 +481,127 @@ const styles = {
     minHeight: "calc(100svh - 20px)",
     margin: "0 auto",
     display: "grid",
-    gridTemplateRows: "auto 1fr auto",
+    gridTemplateRows: "auto minmax(0, 1fr) auto auto",
     gap: "10px",
   },
-  headerRow: {
+  topRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "12px",
   },
   closeButton: {
-    width: "54px",
-    height: "54px",
-    borderRadius: "18px",
+    width: "48px",
+    height: "48px",
+    borderRadius: "16px",
     border: "1px solid #d4deed",
     background: "#f8fbff",
     color: "#0f172a",
-    fontSize: "24px",
+    fontSize: "22px",
     fontWeight: 700,
   },
-  progressText: {
+  smallStatus: {
     color: "#475569",
     fontWeight: 800,
     fontSize: "14px",
-    paddingRight: "6px",
   },
   stageCard: {
-    position: "relative",
     background: "rgba(255,255,255,0.96)",
     borderRadius: "28px",
     border: "1px solid #dbe4f0",
     boxShadow: "0 16px 38px rgba(15,23,42,0.08)",
-    padding: "14px",
+    padding: "12px",
     display: "grid",
-    gridTemplateRows: "auto auto minmax(0, 1fr) auto auto",
-    gap: "10px",
+    gridTemplateRows: "auto minmax(0, 1fr) auto",
+    gap: "8px",
     minHeight: 0,
   },
-  timerBox: {
-    position: "absolute",
-    top: "14px",
-    right: "14px",
-    width: "112px",
-    borderRadius: "22px",
-    background: "linear-gradient(180deg, #0b1535 0%, #09112a 100%)",
-    padding: "12px 10px",
-    textAlign: "center",
-    zIndex: 2,
-  },
-  timerLabel: {
-    color: "#9dbdff",
-    fontSize: "11px",
-    letterSpacing: "0.24em",
-    fontWeight: 900,
-  },
-  timerValue: {
-    color: "#f7d548",
-    fontWeight: 900,
-    fontSize: "46px",
-    lineHeight: 1,
-    fontVariantNumeric: "tabular-nums",
-    textShadow: "0 0 16px rgba(247,213,72,0.2)",
-  },
-  titleWrap: {
-    paddingRight: "122px",
-  },
-  stateBadge: {
-    display: "inline-flex",
+  titleRow: {
+    display: "flex",
     alignItems: "center",
-    justifyContent: "center",
-    borderRadius: "999px",
-    background: "#f4ead1",
-    color: "#9a6321",
-    padding: "10px 14px",
-    fontWeight: 800,
-    fontSize: "13px",
-    marginBottom: "8px",
+    justifyContent: "space-between",
+    gap: "12px",
   },
   title: {
     margin: 0,
     color: "#0f172a",
-    fontSize: "clamp(34px, 8vw, 52px)",
+    fontSize: "clamp(28px, 7vw, 42px)",
     lineHeight: 1.02,
     letterSpacing: "-0.05em",
     fontWeight: 900,
   },
-  subtitle: {
-    margin: "8px 0 0",
-    color: "#64748b",
-    fontSize: "15px",
-    lineHeight: 1.45,
-    wordBreak: "keep-all",
-  },
   faceStage: {
     position: "relative",
-    borderRadius: "28px",
+    borderRadius: "26px",
     overflow: "hidden",
-    background: "linear-gradient(180deg, #0f172a 0%, #111c3d 100%)",
-    minHeight: "320px",
+    background: "linear-gradient(180deg, #101624 0%, #15203f 100%)",
+    minHeight: "0",
     height: "100%",
+    touchAction: "none",
+    userSelect: "none",
   },
   faceImage: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    objectPosition: "center 30%",
+    objectPosition: "center 28%",
     display: "block",
+    userSelect: "none",
+    WebkitUserDrag: "none",
+  },
+  timerBox: {
+    position: "absolute",
+    top: "12px",
+    right: "12px",
+    width: "74px",
+    borderRadius: "18px",
+    background: "linear-gradient(180deg, #0b1535 0%, #09112a 100%)",
+    padding: "9px 8px",
+    textAlign: "center",
+    zIndex: 3,
+  },
+  timerLabel: {
+    color: "#9dbdff",
+    fontSize: "9px",
+    letterSpacing: "0.22em",
+    fontWeight: 900,
+  },
+  timerValue: {
+    color: "#f7d548",
+    fontWeight: 900,
+    fontSize: "34px",
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
+    textShadow: "0 0 16px rgba(247,213,72,0.2)",
+  },
+  foamDot: {
+    position: "absolute",
+    transform: "translate(-50%, -50%)",
+    width: "18px",
+    height: "18px",
+    borderRadius: "50%",
+    background: "rgba(255,255,255,0.88)",
+    boxShadow: "0 0 0 4px rgba(255,255,255,0.18)",
+    pointerEvents: "none",
+    zIndex: 2,
   },
   spotButton: {
     position: "absolute",
     transform: "translate(-50%, -50%)",
-    width: "34px",
-    height: "34px",
     borderRadius: "50%",
     border: "none",
     display: "grid",
     placeItems: "center",
-    color: "#ffffff",
     fontWeight: 900,
-    fontSize: "16px",
+    fontSize: "10px",
+    zIndex: 4,
   },
   legendRow: {
     display: "flex",
-    flexWrap: "wrap",
     gap: "10px 14px",
     alignItems: "center",
+    flexWrap: "wrap",
+    padding: "2px 4px 0",
   },
   legendItem: {
     display: "flex",
@@ -461,19 +612,9 @@ const styles = {
     fontSize: "13px",
   },
   legendDot: {
-    width: "12px",
-    height: "12px",
+    width: "10px",
+    height: "10px",
     borderRadius: "50%",
-  },
-  statusBox: {
-    borderRadius: "18px",
-    background: "#0f172a",
-    color: "#e2e8f0",
-    padding: "14px 16px",
-    fontSize: "14px",
-    fontWeight: 700,
-    lineHeight: 1.45,
-    wordBreak: "keep-all",
   },
   toolGrid: {
     display: "grid",
@@ -481,10 +622,10 @@ const styles = {
     gap: "10px",
   },
   toolButton: {
-    borderRadius: "24px",
+    borderRadius: "22px",
     border: "2px solid transparent",
-    minHeight: "94px",
-    padding: "14px",
+    minHeight: "84px",
+    padding: "12px",
     textAlign: "center",
   },
   toolLabel: {
@@ -493,8 +634,18 @@ const styles = {
     marginBottom: "4px",
   },
   toolSub: {
+    fontSize: "13px",
+    fontWeight: 700,
+  },
+  bottomHint: {
+    borderRadius: "18px",
+    background: "#0f172a",
+    color: "#e2e8f0",
+    padding: "12px 14px",
     fontSize: "14px",
     fontWeight: 700,
+    lineHeight: 1.4,
+    wordBreak: "keep-all",
   },
 };
 

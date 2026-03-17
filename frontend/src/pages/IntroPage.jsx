@@ -1,28 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const FACE_POOL = [
-  { key: "male", src: "/faces/male_face_game.png", label: "남자 피부" },
-  { key: "female", src: "/faces/female_face_game.png", label: "여자 피부" },
+const FACE_OPTIONS = [
+  { key: "female", src: "/faces/female_face_game.png", label: "여자 캐릭터" },
+  { key: "male", src: "/faces/male_face_game.png", label: "남자 캐릭터" },
 ];
-
-function pickRandomFace() {
-  return FACE_POOL[Math.floor(Math.random() * FACE_POOL.length)];
-}
 
 function IntroPage() {
   const navigate = useNavigate();
   const [nickname, setNickname] = useState(localStorage.getItem("nickname") || "");
-  const [face, setFace] = useState(() => pickRandomFace());
+  const [selectedFaceKey, setSelectedFaceKey] = useState(() => {
+    const saved = localStorage.getItem("selectedFaceKey");
+    return saved === "male" || saved === "female" ? saved : "female";
+  });
 
   useEffect(() => {
-    localStorage.setItem("selectedFaceKey", face.key);
-  }, [face]);
+    localStorage.setItem("selectedFaceKey", selectedFaceKey);
+  }, [selectedFaceKey]);
 
-  const helperText = useMemo(
-    () => ["화농성은 진정 먼저", "좁쌀·블랙헤드는 세안 우선", "압출은 정답이 아닐 수 있어요"],
-    []
-  );
+  const selectedFace = FACE_OPTIONS.find((item) => item.key === selectedFaceKey) || FACE_OPTIONS[0];
 
   const handleStart = () => {
     const trimmed = nickname.trim();
@@ -38,7 +34,7 @@ function IntroPage() {
     }
 
     localStorage.setItem("nickname", trimmed);
-    localStorage.setItem("selectedFaceKey", face.key);
+    localStorage.setItem("selectedFaceKey", selectedFace.key);
     navigate("/game");
   };
 
@@ -50,31 +46,43 @@ function IntroPage() {
         <p style={styles.subtitle}>화농성인지 비화농성인지 보고 세안 · 연고 · 패치 · 압출 중 더 나은 선택을 해보세요.</p>
 
         <div style={styles.heroFrame}>
-          <img src={face.src} alt={face.label} style={styles.heroImage} />
-          <button type="button" style={styles.shuffleButton} onClick={() => setFace(pickRandomFace())}>
-            얼굴 바꾸기
-          </button>
+          <img src={selectedFace.src} alt={selectedFace.label} style={styles.heroImage} />
+        </div>
+
+        <div style={styles.choiceWrap}>
+          {FACE_OPTIONS.map((option) => {
+            const active = option.key === selectedFaceKey;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setSelectedFaceKey(option.key)}
+                style={{
+                  ...styles.choiceButton,
+                  borderColor: active ? "#1d4ed8" : "#d8e1ee",
+                  background: active ? "#eff6ff" : "#ffffff",
+                  boxShadow: active ? "0 0 0 3px rgba(29,78,216,0.12)" : "none",
+                }}
+              >
+                {option.key === "female" ? "여 캐릭터" : "남 캐릭터"}
+              </button>
+            );
+          })}
         </div>
 
         <div style={styles.stepGrid}>
           <div style={styles.stepCard}>
             <div style={styles.stepNumber}>1</div>
-            <div style={styles.stepText}>여드름 상태 확인</div>
+            <div style={styles.stepText}>피부 상태 보기</div>
           </div>
           <div style={styles.stepCard}>
             <div style={styles.stepNumber}>2</div>
-            <div style={styles.stepText}>알맞은 관리 선택</div>
+            <div style={styles.stepText}>관리 방법 선택</div>
           </div>
           <div style={styles.stepCard}>
             <div style={styles.stepNumber}>3</div>
-            <div style={styles.stepText}>점수와 랭킹 확인</div>
+            <div style={styles.stepText}>점수 확인</div>
           </div>
-        </div>
-
-        <div style={styles.helperBox}>
-          {helperText.map((item) => (
-            <div key={item} style={styles.helperLine}>{item}</div>
-          ))}
         </div>
 
         <input
@@ -100,12 +108,11 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     padding: "16px",
-    boxSizing: "border-box",
   },
   card: {
     width: "100%",
     maxWidth: "460px",
-    background: "rgba(255,255,255,0.96)",
+    background: "rgba(255,255,255,0.97)",
     borderRadius: "28px",
     padding: "18px",
     boxShadow: "0 18px 46px rgba(15,23,42,0.1)",
@@ -116,18 +123,17 @@ const styles = {
   badge: {
     justifySelf: "center",
     background: "#0f172a",
-    color: "#ffffff",
+    color: "#fff",
     padding: "10px 16px",
     borderRadius: "999px",
     fontWeight: 900,
     fontSize: "14px",
-    letterSpacing: "0.02em",
   },
   title: {
     margin: 0,
     textAlign: "center",
     color: "#0f172a",
-    fontSize: "clamp(34px, 8vw, 56px)",
+    fontSize: "clamp(32px, 8vw, 54px)",
     lineHeight: 1.02,
     letterSpacing: "-0.05em",
     fontWeight: 900,
@@ -141,7 +147,6 @@ const styles = {
     wordBreak: "keep-all",
   },
   heroFrame: {
-    position: "relative",
     borderRadius: "28px",
     background: "linear-gradient(180deg, #0f172a 0%, #111c3d 100%)",
     overflow: "hidden",
@@ -152,19 +157,21 @@ const styles = {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    objectPosition: "center 35%",
+    objectPosition: "center 32%",
     display: "block",
   },
-  shuffleButton: {
-    position: "absolute",
-    right: "12px",
-    bottom: "12px",
-    border: "none",
-    borderRadius: "999px",
-    background: "rgba(255,255,255,0.92)",
+  choiceWrap: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+  },
+  choiceButton: {
+    borderRadius: "18px",
+    border: "2px solid #d8e1ee",
+    background: "#fff",
+    minHeight: "54px",
+    fontWeight: 900,
     color: "#0f172a",
-    padding: "10px 14px",
-    fontWeight: 800,
   },
   stepGrid: {
     display: "grid",
@@ -175,24 +182,24 @@ const styles = {
     borderRadius: "20px",
     background: "#f8fafc",
     border: "1px solid #dbe4f0",
-    padding: "12px 10px",
+    padding: "12px 8px",
     textAlign: "center",
-    minHeight: "108px",
+    minHeight: "100px",
     display: "grid",
     alignContent: "center",
     gap: "8px",
   },
   stepNumber: {
-    width: "44px",
-    height: "44px",
+    width: "42px",
+    height: "42px",
     borderRadius: "50%",
     margin: "0 auto",
     display: "grid",
     placeItems: "center",
     background: "#3b63e6",
-    color: "#ffffff",
+    color: "#fff",
     fontWeight: 900,
-    fontSize: "28px",
+    fontSize: "26px",
   },
   stepText: {
     color: "#1e293b",
@@ -201,27 +208,14 @@ const styles = {
     lineHeight: 1.35,
     wordBreak: "keep-all",
   },
-  helperBox: {
-    borderRadius: "18px",
-    background: "#eef4ff",
-    padding: "12px 14px",
-    display: "grid",
-    gap: "6px",
-  },
-  helperLine: {
-    color: "#1f3ea7",
-    fontSize: "14px",
-    fontWeight: 700,
-  },
   input: {
     width: "100%",
     padding: "16px 18px",
     borderRadius: "18px",
     border: "1.5px solid #cbd5e1",
     fontSize: "16px",
-    boxSizing: "border-box",
+    background: "#fff",
     outline: "none",
-    background: "#ffffff",
   },
   startButton: {
     width: "100%",
@@ -229,10 +223,9 @@ const styles = {
     border: "none",
     borderRadius: "20px",
     background: "linear-gradient(90deg, #0f172a 0%, #1d4ed8 100%)",
-    color: "#ffffff",
+    color: "#fff",
     fontSize: "18px",
     fontWeight: 900,
-    cursor: "pointer",
     boxShadow: "0 12px 24px rgba(29, 78, 216, 0.18)",
   },
 };
