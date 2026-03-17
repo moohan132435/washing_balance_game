@@ -2,8 +2,7 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-// const API_BASE_URL = "http://localhost:5000";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 function RankingPage() {
   const navigate = useNavigate();
@@ -13,20 +12,20 @@ function RankingPage() {
     const fetchRankings = async () => {
       try {
         const response = await axios.get(`${API_BASE_URL}/api/rankings`);
-        setRankings(response.data || []);
+        setRankings(Array.isArray(response.data) ? response.data : []);
       } catch (error) {
         console.error("랭킹 조회 실패:", error);
       }
     };
 
-    fetchRankings();
+    if (API_BASE_URL) fetchRankings();
   }, []);
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.container}>
         <h1 style={styles.title}>오락실 랭킹</h1>
-        <p style={styles.subtitle}>닉네임별 최고 점수 TOP 10</p>
+        <p style={styles.subtitle}>닉네임별 최고 점수 전체 랭킹</p>
 
         <div style={styles.list}>
           {rankings.length === 0 ? (
@@ -47,12 +46,8 @@ function RankingPage() {
         </div>
 
         <div style={styles.buttonGroup}>
-          <button style={styles.button} onClick={() => navigate("/game")}>
-            다시 도전하기
-          </button>
-          <button style={styles.button} onClick={() => navigate("/")}>
-            처음으로
-          </button>
+          <button style={styles.button} onClick={() => navigate("/game")}>다시 도전하기</button>
+          <button style={styles.button} onClick={() => navigate("/")}>처음으로</button>
         </div>
       </div>
     </div>
@@ -61,32 +56,15 @@ function RankingPage() {
 
 const styles = {
   wrapper: {
-    minHeight: "100vh",
+    minHeight: "100svh",
     background: "linear-gradient(180deg, #f8fafc 0%, #eef4ff 100%)",
-    padding: "24px",
+    padding: "24px 16px",
     boxSizing: "border-box",
   },
-  container: {
-    maxWidth: "860px",
-    margin: "0 auto",
-  },
-  title: {
-    textAlign: "center",
-    fontSize: "36px",
-    marginBottom: "8px",
-    color: "#111827",
-  },
-  subtitle: {
-    textAlign: "center",
-    color: "#64748b",
-    marginBottom: "24px",
-    fontSize: "16px",
-  },
-  list: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "12px",
-  },
+  container: { maxWidth: "860px", margin: "0 auto" },
+  title: { textAlign: "center", fontSize: "36px", marginBottom: "8px", color: "#111827" },
+  subtitle: { textAlign: "center", color: "#64748b", marginBottom: "24px", fontSize: "16px" },
+  list: { display: "flex", flexDirection: "column", gap: "12px" },
   emptyCard: {
     background: "#ffffff",
     borderRadius: "18px",
@@ -118,29 +96,11 @@ const styles = {
     fontSize: "18px",
     flexShrink: 0,
   },
-  playerInfo: {
-    flex: 1,
-  },
-  nickname: {
-    fontSize: "20px",
-    fontWeight: "800",
-    color: "#111827",
-  },
-  grade: {
-    color: "#64748b",
-    marginTop: "4px",
-  },
-  scenario: {
-    color: "#94a3b8",
-    marginTop: "4px",
-    fontSize: "13px",
-  },
-  score: {
-    fontSize: "24px",
-    fontWeight: "800",
-    color: "#2563eb",
-    flexShrink: 0,
-  },
+  playerInfo: { flex: 1 },
+  nickname: { fontSize: "20px", fontWeight: "800", color: "#111827" },
+  grade: { color: "#64748b", marginTop: "4px" },
+  scenario: { color: "#94a3b8", marginTop: "4px", fontSize: "13px" },
+  score: { fontSize: "24px", fontWeight: "800", color: "#2563eb", flexShrink: 0 },
   buttonGroup: {
     marginTop: "24px",
     display: "flex",

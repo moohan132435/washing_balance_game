@@ -235,7 +235,7 @@ app.get("/api/rankings", async (req, res) => {
         updated_at AS "updatedAt"
       FROM rankings
       ORDER BY score DESC, updated_at ASC
-      LIMIT 10;
+      ;
     `);
 
     return res.json(result.rows);
