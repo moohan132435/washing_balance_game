@@ -216,6 +216,7 @@ const styles = {
     fontSize: "16px",
     background: "#fff",
     outline: "none",
+    boxSizing: "border-box",
   },
   startButton: {
     width: "100%",
