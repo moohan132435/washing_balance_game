@@ -78,17 +78,13 @@ function ResultPage() {
   }, [API_BASE_URL, saveStatus]);
 
   const topFive = rankings.slice(0, 5);
-  const currentAttemptRank = useMemo(() => {
-    const virtualEntry = {
-      nickname: result.nickname,
-      score: Number(result.score || 0),
-      grade: result.grade,
-      currentAttemptAt: result.currentAttemptAt || new Date().toISOString(),
-    };
+  const mySavedRank = useMemo(() => {
+    if (!rankings.length || !result.nickname) return null;
 
-    const ranked = [...rankings, virtualEntry].sort(compareRank);
-    return ranked.findIndex((item) => item.currentAttemptAt === virtualEntry.currentAttemptAt) + 1;
-  }, [rankings, result]);
+    const ranked = [...rankings].sort(compareRank);
+    const index = ranked.findIndex((item) => item.nickname === result.nickname);
+    return index >= 0 ? index + 1 : null;
+  }, [rankings, result.nickname]);
 
   return (
     <div style={styles.wrapper}>
@@ -133,9 +129,9 @@ function ResultPage() {
 
           <div style={styles.myRankCard}>
             <div style={styles.rankCardLabel}>내 랭킹</div>
-            <div style={styles.myRankValue}>{currentAttemptRank > 0 ? `${currentAttemptRank}등` : "집계 전"}</div>
+            <div style={styles.myRankValue}>{mySavedRank ? `${mySavedRank}등` : "집계 전"}</div>
             <div style={styles.myRankText}>{result.nickname}</div>
-            <div style={styles.subInfo}>{result.scenarioSummary || "이번 플레이 기록"}</div>
+            <div style={styles.subInfo}>{mySavedRank ? "최고 점수 기준 랭킹" : "랭킹 집계 중"}</div>
           </div>
         </div>
 

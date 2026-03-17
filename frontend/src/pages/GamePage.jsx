@@ -21,7 +21,7 @@ const SPOT_BLUEPRINTS = [
 const TOOL_META = {
   wash: { label: "세안", sub: "문지르기", bg: "#ffffff", color: "#0f172a", border: "#cbd5e1" },
   ointment: { label: "연고", sub: "붉은 트러블", bg: "#ef4444", color: "#ffffff", border: "#ef4444" },
-  patch: { label: "패치", sub: "노란 단계", bg: "#f59e0b", color: "#111827", border: "#f59e0b" },
+  patch: { label: "패치", sub: "진정 마무리", bg: "#f59e0b", color: "#111827", border: "#f59e0b" },
   squeeze: { label: "압출", sub: "위험 선택", bg: "#0f172a", color: "#ffffff", border: "#0f172a" },
 };
 
@@ -51,21 +51,21 @@ function buildSpots() {
 }
 
 function getResultType(score) {
-  if (score >= 90) return "피부 응급처치 마스터";
-  if (score >= 75) return "침착한 진정형";
-  if (score >= 55) return "조금만 더 관찰형";
+  if (score >= 92) return "피부 응급처치 마스터";
+  if (score >= 74) return "침착한 진정형";
+  if (score >= 50) return "조금만 더 관찰형";
   return "손부터 가는 압출형";
 }
 
 function getResultMessage(score) {
-  if (score >= 90) return "상태를 보고 맞는 케어를 꽤 잘 골랐어요.";
-  if (score >= 75) return "큰 실수 없이 안정적으로 관리했어요.";
-  if (score >= 55) return "조금만 더 보고 고르면 점수가 더 올라가요.";
+  if (score >= 92) return "상태를 보고 맞는 케어를 거의 놓치지 않았어요.";
+  if (score >= 74) return "큰 실수 없이 안정적으로 관리했어요.";
+  if (score >= 50) return "조금만 더 보고 고르면 점수가 더 올라가요.";
   return "건드리기 전에 한 번 더 보는 습관이 필요해요.";
 }
 
 function computeScore(spots, timeLeft) {
-  let score = 20;
+  let score = 12;
   let correct = 0;
   let partial = 0;
   let wrong = 0;
@@ -76,28 +76,32 @@ function computeScore(spots, timeLeft) {
 
     if (spot.type === "inflamed") {
       if (spot.treated) {
-        score += 18;
+        score += 7;
         partial += 1;
       }
       if (spot.patched) {
-        score += 14;
+        score += 10;
         correct += 1;
       }
       if (spot.resolved) resolved += 1;
+      if (!spot.resolved) score -= 4;
     } else {
       if (spot.resolved) {
-        score += 26;
+        score += 14;
         correct += 1;
         resolved += 1;
       } else if (spot.washProgress >= 1) {
-        score += 8;
+        score += 4;
         partial += 1;
+        score -= 2;
+      } else {
+        score -= 5;
       }
     }
   });
 
-  score -= wrong * 8;
-  score += Math.max(0, Math.min(8, timeLeft));
+  score -= wrong * 12;
+  score += Math.max(0, Math.min(3, Math.floor(timeLeft / 3)));
   score = Math.max(0, Math.min(100, score));
   return { score, correct, partial, wrong, resolved };
 }
@@ -149,8 +153,8 @@ function getSpotView(spot) {
     return {
       size: 9,
       hitSize: 22,
-      color: "rgba(245,158,11,0.82)",
-      ring: "0 0 0 2px rgba(254,240,138,0.24)",
+      color: "rgba(244,114,182,0.82)",
+      ring: "0 0 0 2px rgba(251,207,232,0.28)",
       label: "",
       textColor: "#111827",
       opacity: 1,
@@ -161,8 +165,8 @@ function getSpotView(spot) {
   return {
     size: 10,
     hitSize: 24,
-    color: "rgba(245,158,11,0.92)",
-    ring: "0 0 0 2px rgba(254,240,138,0.26)",
+    color: "rgba(244,114,182,0.92)",
+    ring: "0 0 0 2px rgba(251,207,232,0.3)",
     label: "",
     textColor: "#111827",
     opacity: 1,
@@ -185,6 +189,7 @@ function GamePage() {
   const lastRubAtRef = useRef(new Map());
   const finishedRef = useRef(false);
   const spawnIntervalRef = useRef(null);
+  const timeLeftRef = useRef(TOTAL_TIME);
   const [isRubbing, setIsRubbing] = useState(false);
   const nickname = localStorage.getItem("nickname") || "PLAYER";
   const selectedFaceKey = localStorage.getItem("selectedFaceKey");
@@ -229,6 +234,10 @@ function GamePage() {
   }, []);
 
   useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
+
+  useEffect(() => {
     if (finishedRef.current) return;
 
     if (timeLeft === 0 || unresolvedCount === 0) {
@@ -261,9 +270,12 @@ function GamePage() {
 
   useEffect(() => {
     if (!foamPoints.length) return undefined;
+
     const timer = window.setTimeout(() => {
-      setFoamPoints((prev) => prev.slice(-8));
-    }, 220);
+      const now = Date.now();
+      setFoamPoints((prev) => prev.filter((point) => point.expiresAt > now));
+    }, 90);
+
     return () => window.clearTimeout(timer);
   }, [foamPoints]);
 
@@ -273,10 +285,8 @@ function GamePage() {
       spawnIntervalRef.current = null;
     }
 
-    if (finishedRef.current || timeLeft <= 0) return undefined;
-
     spawnIntervalRef.current = window.setInterval(() => {
-      if (finishedRef.current) return;
+      if (finishedRef.current || timeLeftRef.current <= 0) return;
       if (Math.random() < 0.85) {
         spawnSpot();
       }
@@ -288,7 +298,7 @@ function GamePage() {
         spawnIntervalRef.current = null;
       }
     };
-  }, [timeLeft]);
+  }, []);
 
   const applyWash = (position) => {
     if (!position) return;
@@ -303,7 +313,10 @@ function GamePage() {
 
     if (!insideFace) return;
 
-    setFoamPoints((prev) => [...prev.slice(-12), { ...position, id: `${Date.now()}-${Math.random()}` }]);
+    setFoamPoints((prev) => [
+      ...prev.filter((point) => point.expiresAt > Date.now()).slice(-10),
+      { ...position, id: `${Date.now()}-${Math.random()}`, expiresAt: Date.now() + 260 },
+    ]);
 
     setSpots((prev) =>
       prev.map((spot) => {
@@ -325,7 +338,7 @@ function GamePage() {
             washProgress: nextProgress,
             resolved,
           };
-          setStatusMessage(resolved ? "비화농성 트러블이 세안으로 정리됐어요." : "좋아요. 거품으로 한 번 더 부드럽게 문질러보세요.");
+          setStatusMessage(resolved ? "분홍 트러블이 세안으로 정리됐어요." : "좋아요. 분홍 스팟을 거품으로 한 번 더 부드럽게 문질러보세요.");
           if (resolved) triggerFadeOut(spot.id);
           return nextSpot;
         }
@@ -405,13 +418,13 @@ function GamePage() {
 
         if (selectedTool === "ointment") {
           nextSpot.wrongCount += 1;
-          nextMessage = "노란 비화농성은 세안으로 문지르는 편이 더 잘 맞아요.";
+          nextMessage = "분홍 비화농성은 연고보다 세안이 더 잘 맞아요.";
           return nextSpot;
         }
 
         if (selectedTool === "patch") {
           nextSpot.wrongCount += 1;
-          nextMessage = "노란 비화농성은 패치보다 세안이 먼저예요.";
+          nextMessage = "분홍 비화농성은 패치보다 세안이 먼저예요.";
           return nextSpot;
         }
 
@@ -507,7 +520,7 @@ function GamePage() {
 
           <div style={styles.legendRow}>
             <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#ef4444" }} /> 연고 단계</div>
-            <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#f59e0b" }} /> 세안/패치 단계</div>
+            <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#f472b6" }} /> 세안 단계</div>
             <div style={styles.legendItem}><span style={{ ...styles.legendDot, background: "#3b82f6" }} /> 해결됨</div>
           </div>
         </div>
@@ -521,7 +534,7 @@ function GamePage() {
                 type="button"
                 onClick={() => {
                   setSelectedTool(key);
-                  setStatusMessage(key === "wash" ? "세안 모드예요. 노란 비화농성 스팟을 문질러보세요." : `${meta.label} 선택됨. 색이 맞는 스팟을 눌러 관리해보세요.`);
+                  setStatusMessage(key === "wash" ? "세안 모드예요. 분홍 비화농성 스팟을 문질러보세요." : `${meta.label} 선택됨. 색이 맞는 스팟을 눌러 관리해보세요.`);
                 }}
                 style={{
                   ...styles.toolButton,
@@ -718,7 +731,7 @@ const styles = {
     lineHeight: 1,
   },
   bottomHint: {
-    minHeight: "52px",
+    minHeight: "56px",
     borderRadius: "18px",
     background: "#0f172a",
     color: "#ffffff",
