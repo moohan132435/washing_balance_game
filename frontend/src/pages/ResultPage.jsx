@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
@@ -26,16 +26,16 @@ function ResultPage() {
   const navigate = useNavigate();
   const result = location.state || FALLBACK_RESULT;
 
-  const saveRequestedRef = useRef(false);
   const [rankings, setRankings] = useState([]);
   const [saveStatus, setSaveStatus] = useState(API_BASE_URL ? "idle" : "disabled");
   const [savedRecord, setSavedRecord] = useState(null);
+  const [saveMeta, setSaveMeta] = useState({ updated: false, previousScore: null, storedScore: null });
 
   const payload = useMemo(
     () => ({
       nickname: result.nickname,
-      score: result.score,
-      grade: result.grade,
+      score: Number(result.score || 0),
+      grade: result.grade || result.resultType || "결과 없음",
       cleanRate: 0,
       irritation: 0,
       moisture: 0,
@@ -46,71 +46,72 @@ function ResultPage() {
   );
 
   useEffect(() => {
-    const saveScore = async () => {
-      if (!API_BASE_URL || saveRequestedRef.current) return;
-      if (!payload.nickname || payload.score == null || !payload.grade) return;
+    let mounted = true;
 
-      saveRequestedRef.current = true;
+    const saveAndFetch = async () => {
+      if (!API_BASE_URL || !payload.nickname) return;
 
       try {
         setSaveStatus("saving");
-        const response = await axios.post(`${API_BASE_URL}/api/scores`, payload);
-        const returned = response?.data?.data || null;
-        setSavedRecord(returned);
+        const saveResponse = await axios.post(`${API_BASE_URL}/api/scores`, payload);
+        const saveBody = saveResponse?.data || {};
+        const stored = saveBody.data || null;
+
+        if (!mounted) return;
+
+        setSavedRecord(stored);
+        setSaveMeta({
+          updated: Boolean(saveBody.updated),
+          previousScore: saveBody.previousScore ?? null,
+          storedScore: saveBody.storedScore ?? stored?.score ?? Number(result.score || 0),
+        });
+
+        const rankingResponse = await axios.get(`${API_BASE_URL}/api/rankings?limit=200`);
+        const rankingList = Array.isArray(rankingResponse.data) ? rankingResponse.data : [];
+        const sorted = [...rankingList].sort(compareRank);
+
+        if (!mounted) return;
+
+        setRankings(sorted);
+        if (!stored && result.nickname) {
+          const matched = sorted.find((item) => item.nickname === result.nickname);
+          if (matched) setSavedRecord(matched);
+        }
         setSaveStatus("success");
       } catch (error) {
-        console.error("랭킹 저장 실패", error);
-        setSaveStatus("error");
+        console.error("랭킹 저장/조회 실패", error);
+        if (mounted) setSaveStatus("error");
       }
     };
 
-    saveScore();
-  }, [API_BASE_URL, payload]);
-
-  useEffect(() => {
-    const fetchRankings = async () => {
-      if (!API_BASE_URL) return;
-
-      try {
-        const response = await axios.get(`${API_BASE_URL}/api/rankings?limit=200`);
-        setRankings(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error("랭킹 조회 실패", error);
-      }
+    saveAndFetch();
+    return () => {
+      mounted = false;
     };
+  }, [API_BASE_URL, payload, result.nickname, result.score]);
 
-    fetchRankings();
-  }, [API_BASE_URL, saveStatus]);
+  const topFive = useMemo(() => rankings.slice(0, 5), [rankings]);
 
-  const sortedRankings = useMemo(() => [...rankings].sort(compareRank), [rankings]);
-  const topFive = sortedRankings.slice(0, 5);
+  const mySavedRank = useMemo(() => {
+    if (!savedRecord?.nickname || !rankings.length) return null;
+    const index = rankings.findIndex((item) => item.nickname === savedRecord.nickname);
+    return index >= 0 ? index + 1 : null;
+  }, [rankings, savedRecord]);
 
-  const myRankingInfo = useMemo(() => {
-    if (!sortedRankings.length) return null;
-
-    const referenceNickname = savedRecord?.nickname || result.nickname;
-    const referenceScore = Number(savedRecord?.score ?? result.score ?? 0);
-    const referenceUpdatedAt = savedRecord?.updatedAt || result.currentAttemptAt;
-
-    const index = sortedRankings.findIndex((item) => {
-      const sameNickname = item.nickname === referenceNickname;
-      const sameScore = Number(item.score || 0) === referenceScore;
-      if (!sameNickname || !sameScore) return false;
-
-      if (!savedRecord?.updatedAt) return true;
-      return new Date(item.updatedAt || 0).getTime() === new Date(referenceUpdatedAt || 0).getTime();
-    });
-
-    if (index < 0) return null;
-
-    return {
-      rank: index + 1,
-      nickname: referenceNickname,
-      score: referenceScore,
-    };
-  }, [sortedRankings, savedRecord, result.nickname, result.score, result.currentAttemptAt]);
-
-  const didBeatBest = savedRecord ? Number(result.score || 0) >= Number(savedRecord.score || 0) : false;
+  const rightCardTitle = saveStatus === "success" ? "내 저장 기록" : "내 기록";
+  const rightMainValue = savedRecord ? `${savedRecord.score}점` : `${Number(result.score || 0)}점`;
+  const footerMessage =
+    saveStatus === "success"
+      ? saveMeta.updated
+        ? `이번 ${result.score}점이 저장되어 최고 기록이 갱신됐어요.`
+        : saveMeta.previousScore != null && Number(result.score || 0) < Number(saveMeta.storedScore || 0)
+        ? `이번 ${result.score}점은 기존 최고 ${saveMeta.storedScore}점보다 낮아 랭킹은 유지됐어요.`
+        : "최고 점수 기준으로 랭킹이 저장됐어요."
+      : saveStatus === "error"
+      ? "랭킹 저장은 실패했지만 결과는 확인할 수 있어요."
+      : saveStatus === "disabled"
+      ? "API 연결 전이라 로컬 결과만 표시 중이에요."
+      : "랭킹 저장 중이에요.";
 
   return (
     <div style={styles.wrapper}>
@@ -154,34 +155,29 @@ function ResultPage() {
           </div>
 
           <div style={styles.myRankCard}>
-            <div style={styles.rankCardLabel}>내 최고 기록</div>
-            <div style={styles.myRankValue}>{myRankingInfo ? `${myRankingInfo.rank}등` : "집계 전"}</div>
+            <div style={styles.rankCardLabel}>{rightCardTitle}</div>
+            <div style={styles.myRankValue}>{rightMainValue}</div>
             <div style={styles.myRankText}>{savedRecord?.nickname || result.nickname}</div>
             <div style={styles.subInfo}>
-              {myRankingInfo
-                ? `저장 점수 ${myRankingInfo.score}점 기준`
-                : "랭킹 집계 중"}
+              {mySavedRank ? `저장 순위 ${mySavedRank}등 · 최고 점수 기준` : "랭킹 집계 중"}
             </div>
-            {savedRecord && Number(result.score || 0) < Number(savedRecord.score || 0) ? (
-              <div style={styles.noticeText}>이번 {result.score}점은 기존 최고 {savedRecord.score}점을 넘지 못해 랭킹은 유지됐어요.</div>
-            ) : null}
+            <div style={styles.attemptInfo}>
+              이번 플레이 {result.score}점
+              {saveStatus === "success" && !saveMeta.updated && Number(saveMeta.storedScore || 0) > Number(result.score || 0)
+                ? ` · 저장 최고 ${saveMeta.storedScore}점 유지`
+                : saveStatus === "success"
+                ? " · 이번 점수 저장 완료"
+                : ""}
+            </div>
           </div>
         </div>
 
-        <div style={styles.footerInfo}>
-          {saveStatus === "success"
-            ? didBeatBest
-              ? `이번 점수가 저장됐어요. 최고 점수 ${savedRecord?.score ?? result.score}점 기준으로 랭킹이 반영됐어요.`
-              : `기존 최고 점수 ${savedRecord?.score ?? result.score}점이 유지됐어요.`
-            : saveStatus === "error"
-            ? "랭킹 저장은 실패했지만 결과는 확인할 수 있어요."
-            : saveStatus === "disabled"
-            ? "API 연결 전이라 로컬 결과만 표시 중이에요."
-            : "랭킹 저장 중이에요."}
-        </div>
+        <div style={styles.footerInfo}>{footerMessage}</div>
 
         <div style={styles.buttonGroup}>
-          <button style={styles.primaryButton} onClick={() => window.open(WADIZ_URL, "_blank", "noopener,noreferrer")}>{result.ctaText || "와디즈 보러가기"}</button>
+          <button style={styles.primaryButton} onClick={() => window.open(WADIZ_URL, "_blank", "noopener,noreferrer")}>
+            {result.ctaText || "와디즈 보러가기"}
+          </button>
           <div style={styles.secondaryGrid}>
             <button style={styles.secondaryButton} onClick={() => navigate("/ranking")}>전체 랭킹 보기</button>
             <button
@@ -245,66 +241,65 @@ const styles = {
     minWidth: "118px",
     borderRadius: "24px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-    color: "#fef08a",
-    padding: "12px 14px",
+    padding: "14px 16px",
     textAlign: "center",
   },
   scoreLabel: {
-    fontSize: "11px",
+    color: "#9db6ff",
+    fontSize: "12px",
     fontWeight: 900,
-    color: "#93c5fd",
-    letterSpacing: "0.18em",
+    letterSpacing: "0.22em",
   },
   scoreValue: {
-    fontSize: "46px",
-    lineHeight: 1,
+    marginTop: "6px",
+    color: "#f8e984",
+    fontSize: "58px",
     fontWeight: 900,
-    marginTop: "4px",
+    lineHeight: 1,
+    fontVariantNumeric: "tabular-nums",
   },
   typeBox: {
-    background: "linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)",
-    border: "1px solid #dbeafe",
-    borderRadius: "24px",
-    padding: "16px",
+    borderRadius: "26px",
+    border: "1px solid #d8e2f4",
+    background: "#f8fbff",
+    padding: "18px",
   },
   typeLabel: {
     color: "#3b63e6",
-    fontSize: "13px",
     fontWeight: 900,
+    fontSize: "13px",
     marginBottom: "8px",
-    letterSpacing: "0.08em",
   },
   typeValue: {
-    color: "#0f172a",
-    fontSize: "26px",
-    lineHeight: 1.15,
     fontWeight: 900,
-    marginBottom: "8px",
-    wordBreak: "keep-all",
+    fontSize: "30px",
+    color: "#0f172a",
+    lineHeight: 1.15,
   },
   typeDescription: {
-    color: "#475569",
-    fontSize: "15px",
+    marginTop: "10px",
+    color: "#64748b",
+    fontSize: "16px",
+    lineHeight: 1.45,
   },
   compactGrid: {
     display: "grid",
-    gridTemplateColumns: "1.25fr 0.9fr",
+    gridTemplateColumns: "1.1fr 0.9fr",
     gap: "12px",
   },
   rankCard: {
-    borderRadius: "24px",
-    background: "#f8fafc",
-    border: "1px solid #dbe4f0",
-    padding: "14px",
+    borderRadius: "26px",
+    border: "1px solid #d8e2f4",
+    background: "#ffffff",
+    padding: "16px",
   },
   myRankCard: {
-    borderRadius: "24px",
+    borderRadius: "26px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
     color: "#ffffff",
     padding: "14px",
     display: "grid",
     alignContent: "start",
-    gap: "6px",
   },
   rankCardLabel: {
     fontSize: "14px",
@@ -359,7 +354,7 @@ const styles = {
   },
   myRankValue: {
     color: "#f7d548",
-    fontSize: "56px",
+    fontSize: "54px",
     lineHeight: 1,
     fontWeight: 900,
     margin: "8px 0 10px",
@@ -367,7 +362,7 @@ const styles = {
   myRankText: {
     fontWeight: 800,
     fontSize: "19px",
-    marginBottom: "2px",
+    marginBottom: "8px",
   },
   subInfo: {
     color: "#cbd5e1",
@@ -375,11 +370,12 @@ const styles = {
     lineHeight: 1.45,
     wordBreak: "keep-all",
   },
-  noticeText: {
+  attemptInfo: {
+    marginTop: "12px",
     color: "#93c5fd",
-    fontSize: "13px",
-    lineHeight: 1.45,
-    marginTop: "6px",
+    fontSize: "14px",
+    lineHeight: 1.5,
+    wordBreak: "keep-all",
   },
   footerInfo: {
     color: "#64748b",

@@ -1,185 +1,95 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
-require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-function normalizeOrigin(value) {
-  if (!value) return "";
-  return String(value).trim().replace(/\/$/, "");
-}
-
-const allowedOrigins = ["http://localhost:5173", normalizeOrigin(process.env.FRONTEND_URL)].filter(Boolean);
-
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true);
-
-      const normalizedOrigin = normalizeOrigin(origin);
-      if (allowedOrigins.includes(normalizedOrigin)) {
-        return callback(null, true);
-      }
-
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
-  })
-);
-
+app.use(cors());
 app.use(express.json());
 
-const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-    })
-  : null;
-
-async function initDb() {
-  if (!pool) {
-    console.warn("[DB] DATABASE_URL이 없습니다. DB 초기화를 건너뜁니다.");
-    return;
-  }
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS rankings (
-      id SERIAL PRIMARY KEY,
-      nickname VARCHAR(30) UNIQUE NOT NULL,
-      score INT NOT NULL,
-      grade VARCHAR(50) NOT NULL,
-      clean_rate INT NOT NULL DEFAULT 0,
-      irritation INT NOT NULL DEFAULT 0,
-      moisture INT NOT NULL DEFAULT 0,
-      balance_time NUMERIC(6,2) NOT NULL DEFAULT 0,
-      scenario_summary TEXT,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-}
-
-app.get("/", (req, res) => {
-  res.send("Backend server is running!");
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
 });
 
-app.get("/api/health", async (req, res) => {
+// 🔹 점수 저장 API
+app.post("/api/scores", async (req, res) => {
   try {
-    if (!pool) {
-      return res.json({ ok: true, hasDatabaseUrl: false });
+    const { nickname, score } = req.body;
+
+    if (!nickname || score == null) {
+      return res.status(400).json({ error: "invalid input" });
     }
 
-    await pool.query("SELECT 1");
-    return res.json({ ok: true, hasDatabaseUrl: true });
-  } catch (error) {
-    return res.status(500).json({ ok: false, error: error.message });
-  }
-});
-
-app.post("/api/scores", async (req, res) => {
-  const { nickname, score, grade, cleanRate, irritation, moisture, balanceTime, scenarioSummary } = req.body;
-
-  if (!nickname || score === undefined || !grade) {
-    return res.status(400).json({ ok: false, message: "nickname, score, grade는 필수입니다." });
-  }
-
-  if (!pool) {
-    return res.status(500).json({ ok: false, message: "DATABASE_URL이 설정되지 않아 랭킹 저장이 불가능합니다." });
-  }
-
-  try {
-    const values = [
-      String(nickname).trim().slice(0, 30),
-      Number(score),
-      String(grade),
-      Number(cleanRate || 0),
-      Number(irritation || 0),
-      Number(moisture || 0),
-      Number(balanceTime || 0),
-      String(scenarioSummary || ""),
-    ];
-
-    const result = await pool.query(
-      `
-      INSERT INTO rankings (
-        nickname,
-        score,
-        grade,
-        clean_rate,
-        irritation,
-        moisture,
-        balance_time,
-        scenario_summary,
-        updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
-      ON CONFLICT (nickname)
-      DO UPDATE SET
-        score = CASE WHEN EXCLUDED.score > rankings.score THEN EXCLUDED.score ELSE rankings.score END,
-        grade = CASE WHEN EXCLUDED.score > rankings.score THEN EXCLUDED.grade ELSE rankings.grade END,
-        clean_rate = CASE WHEN EXCLUDED.score > rankings.score THEN EXCLUDED.clean_rate ELSE rankings.clean_rate END,
-        irritation = CASE WHEN EXCLUDED.score > rankings.score THEN EXCLUDED.irritation ELSE rankings.irritation END,
-        moisture = CASE WHEN EXCLUDED.score > rankings.score THEN EXCLUDED.moisture ELSE rankings.moisture END,
-        balance_time = CASE WHEN EXCLUDED.score > rankings.score THEN EXCLUDED.balance_time ELSE rankings.balance_time END,
-        scenario_summary = CASE WHEN EXCLUDED.score > rankings.score THEN EXCLUDED.scenario_summary ELSE rankings.scenario_summary END,
-        updated_at = CASE WHEN EXCLUDED.score > rankings.score THEN CURRENT_TIMESTAMP ELSE rankings.updated_at END
-      RETURNING *;
-      `,
-      values
+    // 기존 점수 조회
+    const existing = await pool.query(
+      "SELECT * FROM rankings WHERE nickname = $1",
+      [nickname],
     );
 
-    return res.json({ ok: true, data: result.rows[0] });
-  } catch (error) {
-    console.error("[DB] 점수 저장 실패:", error);
-    return res.status(500).json({ ok: false, message: "점수 저장 중 오류가 발생했습니다.", error: error.message });
-  }
-});
+    let updated = false;
+    let previousScore = null;
+    let storedScore = score;
 
-app.get("/api/rankings", async (req, res) => {
-  if (!pool) {
-    return res.status(500).json({ ok: false, message: "DATABASE_URL이 설정되지 않아 랭킹 조회가 불가능합니다." });
-  }
+    if (existing.rows.length === 0) {
+      // 신규 유저
+      await pool.query(
+        `INSERT INTO rankings (nickname, score, created_at)
+         VALUES ($1, $2, NOW())`,
+        [nickname, score],
+      );
+      updated = true;
+    } else {
+      previousScore = existing.rows[0].score;
 
-  const requestedLimit = Number(req.query.limit || 100);
-  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 500) : 100;
+      if (score > previousScore) {
+        // 최고점 갱신
+        await pool.query(
+          `UPDATE rankings
+           SET score = $1, updated_at = NOW()
+           WHERE nickname = $2`,
+          [score, nickname],
+        );
+        updated = true;
+        storedScore = score;
+      } else {
+        // 갱신 안됨
+        storedScore = previousScore;
+      }
+    }
 
-  try {
-    const result = await pool.query(
-      `
-      SELECT
-        nickname,
-        score,
-        grade,
-        clean_rate AS "cleanRate",
-        irritation,
-        moisture,
-        balance_time AS "balanceTime",
-        scenario_summary AS "scenarioSummary",
-        updated_at AS "updatedAt"
-      FROM rankings
-      ORDER BY score DESC, updated_at ASC
-      LIMIT $1;
-      `,
-      [limit]
-    );
-
-    return res.json(result.rows);
-  } catch (error) {
-    console.error("[DB] 랭킹 조회 실패:", error);
-    return res.status(500).json({ ok: false, message: "랭킹 조회 중 오류가 발생했습니다.", error: error.message });
-  }
-});
-
-initDb()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
+    return res.json({
+      success: true,
+      updated,
+      previousScore,
+      storedScore,
     });
-  })
-  .catch((error) => {
-    console.error("DB 초기화 실패:", error);
-    process.exit(1);
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "server error" });
+  }
+});
+
+// 🔹 랭킹 조회 API
+app.get("/api/rankings", async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 10;
+
+    const result = await pool.query(
+      `SELECT nickname, score
+       FROM rankings
+       ORDER BY score DESC
+       LIMIT $1`,
+      [limit],
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "server error" });
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on ${PORT}`);
+});
