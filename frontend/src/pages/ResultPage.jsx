@@ -74,6 +74,25 @@ async function requestWithFallback(method, path, config = {}) {
   throw lastError || new Error("request failed");
 }
 
+function formatEventDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+
+async function trackEvent(payload) {
+  try {
+    await requestWithFallback("post", "/api/events", {
+      data: payload,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("event tracking failed", error);
+  }
+}
+
 function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -235,7 +254,19 @@ function ResultPage() {
           <button
             type="button"
             style={styles.primaryButton}
-            onClick={() => window.open(WADIZ_URL, "_blank", "noopener,noreferrer")}
+            onClick={() => {
+              trackEvent({
+                eventType: "wadiz_click",
+                eventTimestamp: new Date().toISOString(),
+                eventDate: formatEventDate(),
+                nickname: payload.nickname,
+                score: payload.score,
+                eventSource: "result_primary_button",
+                page: "ResultPage",
+                meta: { target: "wadiz" },
+              });
+              window.open(WADIZ_URL, "_blank", "noopener,noreferrer");
+            }}
           >
             {result.ctaText || "와디즈 보러가기"}
           </button>
@@ -243,7 +274,19 @@ function ResultPage() {
           <button
             type="button"
             style={styles.eventButton}
-            onClick={() => window.open(INSTAGRAM_DM_URL, "_blank", "noopener,noreferrer")}
+            onClick={() => {
+              trackEvent({
+                eventType: "instagram_dm_click",
+                eventTimestamp: new Date().toISOString(),
+                eventDate: formatEventDate(),
+                nickname: payload.nickname,
+                score: payload.score,
+                eventSource: "result_event_button",
+                page: "ResultPage",
+                meta: { target: "instagram_dm" },
+              });
+              window.open(INSTAGRAM_DM_URL, "_blank", "noopener,noreferrer");
+            }}
           >
             스타벅스 이벤트 참여
           </button>

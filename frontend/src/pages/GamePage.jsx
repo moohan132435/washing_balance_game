@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -23,6 +24,64 @@ const TOOL_META = {
   stage2: { label: "2단계", title: "수분/보습", sub: "터치", bg: "#82c6f5", border: "#5eaee3", text: "#ffffff" },
   stage3: { label: "3단계", title: "피부장벽 강화", sub: "터치", bg: "#e7a27b", border: "#d88457", text: "#ffffff" },
 };
+
+const RAW_BASE_CANDIDATES = [
+  import.meta.env.VITE_API_BASE_URL,
+  import.meta.env.VITE_BACKEND_URL,
+  import.meta.env.VITE_API_URL,
+  "",
+]
+  .map((v) => (typeof v === "string" ? v.trim().replace(/\/$/, "") : ""))
+  .filter((v, i, arr) => v || i === arr.lastIndexOf(v));
+
+function buildCandidates(path) {
+  const candidates = RAW_BASE_CANDIDATES.map((base) => (base ? `${base}${path}` : path));
+  return [...new Set(candidates)];
+}
+
+async function requestWithFallback(method, path, config = {}) {
+  const candidates = buildCandidates(path);
+  let lastError = null;
+
+  for (const url of candidates) {
+    try {
+      const response = await axios({
+        method,
+        url,
+        timeout: 12000,
+        ...config,
+      });
+      return response;
+    } catch (error) {
+      lastError = error;
+      const status = error?.response?.status;
+      if (status && status < 500 && status !== 404) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error("request failed");
+}
+
+function formatEventDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
+}
+
+async function trackEvent(payload) {
+  try {
+    await requestWithFallback("post", "/api/events", {
+      data: payload,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("event tracking failed", error);
+  }
+}
 
 function shuffle(list) {
   return [...list].sort(() => Math.random() - 0.5);
@@ -188,6 +247,20 @@ function GamePage() {
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, []);
+
+  useEffect(() => {
+    trackEvent({
+      eventType: "game_start_click",
+      eventTimestamp: new Date().toISOString(),
+      eventDate: formatEventDate(),
+      nickname,
+      score: null,
+      eventSource: "game_entry",
+      page: "GamePage",
+      meta: { faceKey },
+    });
+  }, [faceKey, nickname]);
+
 
   useEffect(() => {
     const timer = window.setInterval(() => {
