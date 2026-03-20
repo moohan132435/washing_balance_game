@@ -12,15 +12,22 @@ const RAW_BASE_CANDIDATES = [
   .map((v) => (typeof v === "string" ? v.trim().replace(/\/$/, "") : ""))
   .filter((v, i, arr) => v || i === arr.lastIndexOf(v));
 
-const FALLBACK_RESULT = {
+const EMPTY_RESULT = {
   nickname: localStorage.getItem("nickname") || "PLAYER",
   score: 0,
   grade: "결과 없음",
   resultType: "결과 없음",
-  resultMessage: "결과 데이터가 없습니다.",
+  resultMessage: "결과 데이터가 없어요. 다시 플레이해 주세요.",
   scenarioSummary: "",
   ctaText: "와디즈 보러가기",
   currentAttemptAt: new Date().toISOString(),
+  careStats: {
+    totalSpots: 0,
+    resolved: 0,
+    correct: 0,
+    partial: 0,
+    wrong: 0,
+  },
 };
 
 function compareRank(a, b) {
@@ -43,16 +50,14 @@ async function requestWithFallback(method, path, config = {}) {
 
   for (const url of candidates) {
     try {
-      const response = await axios({
+      return await axios({
         method,
         url,
         timeout: 12000,
         ...config,
       });
-      return response;
     } catch (error) {
       lastError = error;
-
       const status = error?.response?.status;
       if (status && status < 500 && status !== 404) {
         throw error;
@@ -63,15 +68,30 @@ async function requestWithFallback(method, path, config = {}) {
   throw lastError || new Error("request failed");
 }
 
+function readStoredResult() {
+  try {
+    const raw = localStorage.getItem("latestGameResult");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
 function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const result = location.state || FALLBACK_RESULT;
+  const didRunRef = useRef(false);
+
+  const result = useMemo(() => {
+    const fromState = location.state;
+    const fromStorage = readStoredResult();
+    return fromState || fromStorage || EMPTY_RESULT;
+  }, [location.state]);
 
   const [rankings, setRankings] = useState([]);
   const [footerMessage, setFooterMessage] = useState("결과를 저장하는 중이에요.");
   const [isSaving, setIsSaving] = useState(true);
-  const didRunRef = useRef(false);
 
   const payload = useMemo(
     () => ({
@@ -81,14 +101,14 @@ function ResultPage() {
       resultType: result.resultType || result.grade || "결과 없음",
       resultMessage: result.resultMessage || "",
       scenarioSummary: result.scenarioSummary || "",
-      cleanRate: Number(result.cleanRate || 0),
-      irritation: Number(result.irritation || 0),
-      moisture: Number(result.moisture || 0),
-      balanceTime: Number(result.balanceTime || 0),
       currentAttemptAt: result.currentAttemptAt || new Date().toISOString(),
     }),
-    [result]
+    [result],
   );
+
+  useEffect(() => {
+    localStorage.setItem("latestGameResult", JSON.stringify(result));
+  }, [result]);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,41 +117,47 @@ function ResultPage() {
 
     const run = async () => {
       setIsSaving(true);
+
       try {
         const saveResponse = await requestWithFallback("post", "/api/scores", {
           data: payload,
           headers: { "Content-Type": "application/json" },
         });
 
-        if (cancelled) return;
-
-        const saveData = saveResponse?.data || {};
-        setFooterMessage(saveData.message || "최고 점수 기준으로 랭킹이 저장됐어요.");
+        if (!cancelled) {
+          const saveData = saveResponse?.data || {};
+          setFooterMessage(saveData.message || "최고 점수 기준으로 랭킹이 저장됐어요.");
+        }
       } catch (error) {
-        if (cancelled) return;
-        console.error("score save failed", error);
-        const serverMessage =
-          error?.response?.data?.message ||
-          error?.response?.data?.error ||
-          error?.message ||
-          "랭킹 저장에 실패했어요.";
-        setFooterMessage(serverMessage);
+        if (!cancelled) {
+          console.error("score save failed", error);
+          setFooterMessage(
+            error?.response?.data?.message ||
+              error?.response?.data?.error ||
+              error?.message ||
+              "랭킹 저장에 실패했어요.",
+          );
+        }
       }
 
       try {
         const rankingResponse = await requestWithFallback("get", "/api/rankings?limit=5");
-        if (cancelled) return;
-        const list = Array.isArray(rankingResponse?.data) ? rankingResponse.data : [];
-        setRankings([...list].sort(compareRank).slice(0, 5));
+        if (!cancelled) {
+          const list = Array.isArray(rankingResponse?.data) ? rankingResponse.data : [];
+          setRankings([...list].sort(compareRank).slice(0, 5));
+        }
       } catch (error) {
-        if (cancelled) return;
-        console.error("ranking fetch failed", error);
-        const serverMessage =
-          error?.response?.data?.message ||
-          error?.response?.data?.error ||
-          error?.message ||
-          "랭킹 조회에 실패했어요.";
-        setFooterMessage((prev) => prev === "결과를 저장하는 중이에요." ? serverMessage : `${prev} / ${serverMessage}`);
+        if (!cancelled) {
+          console.error("ranking fetch failed", error);
+          const serverMessage =
+            error?.response?.data?.message ||
+            error?.response?.data?.error ||
+            error?.message ||
+            "랭킹 조회에 실패했어요.";
+          setFooterMessage((prev) =>
+            prev === "결과를 저장하는 중이에요." ? serverMessage : `${prev} / ${serverMessage}`,
+          );
+        }
       } finally {
         if (!cancelled) setIsSaving(false);
       }
@@ -143,6 +169,8 @@ function ResultPage() {
     };
   }, [payload]);
 
+  const careStats = result.careStats || EMPTY_RESULT.careStats;
+
   return (
     <div style={styles.wrapper}>
       <div style={styles.card}>
@@ -153,7 +181,7 @@ function ResultPage() {
           </div>
           <div style={styles.scoreBox}>
             <div style={styles.scoreLabel}>SCORE</div>
-            <div style={styles.scoreValue}>{result.score}</div>
+            <div style={styles.scoreValue}>{payload.score}</div>
           </div>
         </div>
 
@@ -161,6 +189,25 @@ function ResultPage() {
           <div style={styles.typeLabel}>결과 유형</div>
           <div style={styles.typeValue}>{result.resultType || result.grade}</div>
           <div style={styles.typeDescription}>{result.resultMessage}</div>
+        </div>
+
+        <div style={styles.summaryGrid}>
+          <div style={styles.summaryItem}>
+            <div style={styles.summaryLabel}>해결 수</div>
+            <div style={styles.summaryValue}>{careStats.resolved}/{careStats.totalSpots}</div>
+          </div>
+          <div style={styles.summaryItem}>
+            <div style={styles.summaryLabel}>정답 처리</div>
+            <div style={styles.summaryValue}>{careStats.correct}</div>
+          </div>
+          <div style={styles.summaryItem}>
+            <div style={styles.summaryLabel}>부분 성공</div>
+            <div style={styles.summaryValue}>{careStats.partial}</div>
+          </div>
+          <div style={styles.summaryItem}>
+            <div style={styles.summaryLabel}>오답</div>
+            <div style={styles.summaryValue}>{careStats.wrong}</div>
+          </div>
         </div>
 
         <div style={styles.rankCard}>
@@ -239,9 +286,7 @@ const styles = {
     gap: "12px",
     alignItems: "start",
   },
-  titleWrap: {
-    minWidth: 0,
-  },
+  titleWrap: { minWidth: 0 },
   eyebrow: {
     fontSize: "12px",
     fontWeight: 900,
@@ -258,10 +303,10 @@ const styles = {
     wordBreak: "keep-all",
   },
   scoreBox: {
-    minWidth: "118px",
-    borderRadius: "24px",
+    minWidth: "110px",
+    borderRadius: "20px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-    padding: "10px 14px",
+    padding: "8px 12px",
     textAlign: "center",
   },
   scoreLabel: {
@@ -271,7 +316,7 @@ const styles = {
     letterSpacing: "0.18em",
   },
   scoreValue: {
-    fontSize: "44px",
+    fontSize: "40px",
     lineHeight: 1,
     fontWeight: 900,
     marginTop: "4px",
@@ -292,7 +337,7 @@ const styles = {
   },
   typeValue: {
     color: "#0f172a",
-    fontSize: "22px",
+    fontSize: "20px",
     lineHeight: 1.2,
     fontWeight: 900,
     marginBottom: "8px",
@@ -300,8 +345,30 @@ const styles = {
   },
   typeDescription: {
     color: "#475569",
-    fontSize: "15px",
+    fontSize: "14px",
     lineHeight: 1.45,
+  },
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+  },
+  summaryItem: {
+    borderRadius: "18px",
+    border: "1px solid #dbe4f0",
+    background: "#f8fafc",
+    padding: "12px",
+  },
+  summaryLabel: {
+    color: "#64748b",
+    fontWeight: 800,
+    fontSize: "13px",
+  },
+  summaryValue: {
+    color: "#0f172a",
+    fontWeight: 900,
+    fontSize: "22px",
+    marginTop: "6px",
   },
   rankCard: {
     borderRadius: "24px",
@@ -315,14 +382,8 @@ const styles = {
     color: "#0f172a",
     marginBottom: "12px",
   },
-  rankList: {
-    display: "grid",
-    gap: "10px",
-  },
-  emptyText: {
-    color: "#64748b",
-    fontSize: "15px",
-  },
+  rankList: { display: "grid", gap: "10px" },
+  emptyText: { color: "#64748b", fontSize: "15px" },
   rankRow: {
     display: "grid",
     gridTemplateColumns: "38px minmax(0, 1fr) auto",
@@ -338,11 +399,8 @@ const styles = {
     display: "grid",
     placeItems: "center",
     fontWeight: 900,
-    flexShrink: 0,
   },
-  rankNicknameWrap: {
-    minWidth: 0,
-  },
+  rankNicknameWrap: { minWidth: 0 },
   rankNickname: {
     color: "#0f172a",
     fontWeight: 800,
@@ -351,16 +409,8 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  rankGrade: {
-    color: "#64748b",
-    fontSize: "13px",
-    marginTop: "2px",
-  },
-  rankScore: {
-    color: "#3b63e6",
-    fontWeight: 900,
-    fontSize: "22px",
-  },
+  rankGrade: { color: "#64748b", fontSize: "13px", marginTop: "2px" },
+  rankScore: { color: "#3b63e6", fontWeight: 900, fontSize: "22px" },
   footerInfo: {
     textAlign: "center",
     color: "#7c879b",
@@ -368,18 +418,15 @@ const styles = {
     fontWeight: 700,
     minHeight: "20px",
   },
-  buttonGroup: {
-    display: "grid",
-    gap: "12px",
-  },
+  buttonGroup: { display: "grid", gap: "12px" },
   primaryButton: {
     width: "100%",
     border: "none",
-    borderRadius: "22px",
+    borderRadius: "18px",
     background: "linear-gradient(90deg, #0f1c59 0%, #3b54e6 100%)",
     color: "#ffffff",
-    padding: "18px 18px",
-    fontSize: "18px",
+    padding: "15px 18px",
+    fontSize: "16px",
     fontWeight: 900,
     cursor: "pointer",
   },
@@ -390,12 +437,12 @@ const styles = {
   },
   secondaryButton: {
     width: "100%",
-    borderRadius: "20px",
+    borderRadius: "18px",
     border: "1px solid #d6deeb",
     background: "#ffffff",
     color: "#0f172a",
-    padding: "16px 14px",
-    fontSize: "16px",
+    padding: "15px 14px",
+    fontSize: "15px",
     fontWeight: 800,
     cursor: "pointer",
   },

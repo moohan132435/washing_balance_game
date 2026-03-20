@@ -19,10 +19,34 @@ const SPOT_BLUEPRINTS = [
 ];
 
 const TOOL_META = {
-  wash: { label: "세안", sub: "분홍 트러블", bg: "#f472b6", color: "#ffffff", border: "#f472b6" },
-  ointment: { label: "연고", sub: "붉은 트러블", bg: "#ef4444", color: "#ffffff", border: "#ef4444" },
-  patch: { label: "패치", sub: "진정 마무리", bg: "#f59e0b", color: "#111827", border: "#f59e0b" },
+  wash: {
+    label: "1단계 딥클렌징",
+    sub: "문지르기",
+    bg: "#f472b6",
+    color: "#ffffff",
+    border: "#f472b6",
+  },
+  moisture: {
+    label: "2단계 수분/보습",
+    sub: "터치",
+    bg: "#67c8ff",
+    color: "#ffffff",
+    border: "#67c8ff",
+  },
+  barrier: {
+    label: "3단계 피부장벽 강화",
+    sub: "터치",
+    bg: "#f49b72",
+    color: "#ffffff",
+    border: "#f49b72",
+  },
 };
+
+const GUIDE_LINES = [
+  "분홍 여드름은 1단계 딥클렌징으로 문질러 주세요.",
+  "붉은 여드름은 2단계 수분/보습으로 먼저 진정시켜 주세요.",
+  "진정된 붉은 여드름은 3단계 피부장벽 강화로 마무리해 주세요.",
+];
 
 function shuffle(list) {
   return [...list].sort(() => Math.random() - 0.5);
@@ -31,9 +55,8 @@ function shuffle(list) {
 function buildSpotFromBlueprint(spot) {
   return {
     ...spot,
-    stage: spot.type === "inflamed" ? "inflamed" : "nonInflamed",
     treated: false,
-    patched: false,
+    protected: false,
     resolved: false,
     fading: false,
     wrongCount: 0,
@@ -55,10 +78,10 @@ function getResultType(score) {
 }
 
 function getResultMessage(score) {
-  if (score >= 94) return "상태를 보고 맞는 케어를 거의 놓치지 않았어요.";
-  if (score >= 78) return "큰 실수 없이 안정적으로 관리했어요.";
-  if (score >= 56) return "조금만 더 보고 고르면 점수가 더 올라가요.";
-  return "건드리기 전에 한 번 더 보는 습관이 필요해요.";
+  if (score >= 94) return "단계를 잘 지켜서 빠르게 정리했어요.";
+  if (score >= 78) return "전체 흐름은 좋았고 몇 번만 더 하면 더 익숙해져요.";
+  if (score >= 56) return "단계만 조금 더 익히면 점수가 훨씬 올라가요.";
+  return "서두르기보다 단계에 맞게 눌러 보는 연습이 필요해요.";
 }
 
 function computeScore(spots, timeLeft) {
@@ -76,7 +99,7 @@ function computeScore(spots, timeLeft) {
         score += 4;
         partial += 1;
       }
-      if (spot.patched) {
+      if (spot.protected) {
         score += 10;
         correct += 1;
       }
@@ -98,10 +121,6 @@ function computeScore(spots, timeLeft) {
       } else {
         score -= 7;
       }
-    }
-
-    if (spot.squeezeCount > 0) {
-      score -= spot.squeezeCount * 6;
     }
   });
 
@@ -133,9 +152,9 @@ function getSpotView(spot) {
       return {
         size: 11,
         hitSize: 26,
-        color: "rgba(245,158,11,0.95)",
-        ring: "0 0 0 3px rgba(253,230,138,0.45)",
-        border: "2px solid rgba(255,251,235,0.95)",
+        color: "rgba(103,200,255,0.95)",
+        ring: "0 0 0 3px rgba(191,232,255,0.52)",
+        border: "2px solid rgba(255,255,255,0.96)",
         opacity: 1,
         scale: 1,
       };
@@ -184,6 +203,10 @@ function getPointerPosition(event, element) {
   return { x, y };
 }
 
+function persistResult(result) {
+  localStorage.setItem("latestGameResult", JSON.stringify(result));
+}
+
 function GamePage() {
   const navigate = useNavigate();
   const faceStageRef = useRef(null);
@@ -191,19 +214,21 @@ function GamePage() {
   const finishedRef = useRef(false);
   const spawnIntervalRef = useRef(null);
   const timeLeftRef = useRef(TOTAL_TIME);
-  const [isRubbing, setIsRubbing] = useState(false);
+
   const nickname = localStorage.getItem("nickname") || "PLAYER";
   const selectedFaceKey = localStorage.getItem("selectedFaceKey");
   const [faceKey] = useState(() =>
-    selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female"
+    selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female",
   );
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const [selectedTool, setSelectedTool] = useState("wash");
   const [spots, setSpots] = useState(() => buildSpots());
   const [statusMessage, setStatusMessage] = useState(
-    "세안은 얼굴을 문질러서, 연고·패치는 스팟을 눌러서 진행해보세요."
+    "분홍은 문지르기, 붉은 여드름은 2단계 후 3단계로 마무리해 주세요.",
   );
   const [foamPoints, setFoamPoints] = useState([]);
+  const [showGuide, setShowGuide] = useState(true);
+  const [isRubbing, setIsRubbing] = useState(false);
 
   const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved).length, [spots]);
   const faceSrc = FACE_SRC[faceKey] || FACE_SRC.female;
@@ -214,12 +239,40 @@ function GamePage() {
     }, 40);
   };
 
+  const finishGame = (currentSpots, remainingTime) => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+
+    const { score, correct, partial, wrong, resolved } = computeScore(currentSpots, remainingTime);
+    const resultType = getResultType(score);
+    const nextResult = {
+      nickname,
+      score,
+      grade: resultType,
+      resultType,
+      resultMessage: getResultMessage(score),
+      scenarioSummary: `해결 ${resolved}/${currentSpots.length} · 오답 ${wrong}회`,
+      ctaText: "와디즈 보러가기",
+      careStats: {
+        totalSpots: currentSpots.length,
+        resolved,
+        correct,
+        partial,
+        wrong,
+      },
+      currentAttemptAt: new Date().toISOString(),
+    };
+
+    persistResult(nextResult);
+    navigate("/result", { replace: true, state: nextResult });
+  };
+
   const spawnSpot = () => {
     setSpots((prev) => {
       const activeIds = new Set(prev.filter((spot) => !spot.fading && !spot.resolved).map((spot) => spot.id));
       const candidate = shuffle(SPOT_BLUEPRINTS).find((blueprint) => !activeIds.has(blueprint.id));
       if (!candidate) return prev;
-      setStatusMessage("새 트러블이 올라왔어요. 테두리 있는 스팟을 눌러 빠르게 정리해보세요.");
+      setStatusMessage("새 여드름이 올라왔어요. 색을 보고 맞는 단계로 처리해 주세요.");
       return [...prev, buildSpotFromBlueprint(candidate)];
     });
   };
@@ -231,7 +284,10 @@ function GamePage() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (finishedRef.current) return;
-      setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
+      setTimeLeft((prev) => {
+        if (prev <= 1) return 0;
+        return prev - 1;
+      });
     }, 1000);
 
     return () => window.clearInterval(timer);
@@ -239,38 +295,16 @@ function GamePage() {
 
   useEffect(() => {
     timeLeftRef.current = timeLeft;
-  }, [timeLeft]);
+    if (!finishedRef.current && timeLeft === 0) {
+      finishGame(spots, 0);
+    }
+  }, [timeLeft, spots]);
 
   useEffect(() => {
-    if (finishedRef.current) return;
-
-    if (timeLeft === 0 || unresolvedCount === 0) {
-      finishedRef.current = true;
-      const { score, correct, partial, wrong, resolved } = computeScore(spots, timeLeft);
-      const resultType = getResultType(score);
-
-      navigate("/result", {
-        replace: true,
-        state: {
-          nickname,
-          score,
-          grade: resultType,
-          resultType,
-          resultMessage: getResultMessage(score),
-          scenarioSummary: `해결 ${resolved}/${spots.length} · 오답 ${wrong}회`,
-          ctaText: "와디즈 보러가기",
-          careStats: {
-            totalSpots: spots.length,
-            resolved,
-            correct,
-            partial,
-            wrong,
-          },
-          currentAttemptAt: new Date().toISOString(),
-        },
-      });
+    if (!finishedRef.current && unresolvedCount === 0) {
+      finishGame(spots, timeLeft);
     }
-  }, [navigate, nickname, spots, timeLeft, unresolvedCount]);
+  }, [spots, unresolvedCount, timeLeft]);
 
   useEffect(() => {
     if (!foamPoints.length) return undefined;
@@ -343,31 +377,32 @@ function GamePage() {
 
           setStatusMessage(
             resolved
-              ? "분홍 트러블이 세안으로 정리됐어요."
-              : "좋아요. 분홍 스팟을 한 번 더 문질러 마무리해보세요."
+              ? "분홍 여드름이 딥클렌징으로 정리됐어요."
+              : "좋아요. 분홍 여드름을 한 번 더 문질러 마무리해 주세요.",
           );
+
           if (resolved) triggerFadeOut(spot.id);
           return nextSpot;
         }
 
-        setStatusMessage("붉은 화농성은 세안만으로 해결되지 않아요. 빨간 연고 버튼을 먼저 써보세요.");
+        setStatusMessage("붉은 여드름은 문지르기보다 2단계 수분/보습이 먼저예요.");
         return {
           ...spot,
           wrongCount: spot.wrongCount + 1,
           actionLog: [...spot.actionLog, "wash"],
         };
-      })
+      }),
     );
   };
 
   const handleRubStart = (event) => {
-    if (selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
+    if (showGuide || selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
     setIsRubbing(true);
     applyWash(getPointerPosition(event, faceStageRef.current));
   };
 
   const handleRubMove = (event) => {
-    if (!isRubbing || selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
+    if (showGuide || !isRubbing || selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
     applyWash(getPointerPosition(event, faceStageRef.current));
   };
 
@@ -376,7 +411,7 @@ function GamePage() {
   };
 
   const handleSpotClick = (spotId) => {
-    if (finishedRef.current || timeLeft === 0 || selectedTool === "wash") return;
+    if (showGuide || finishedRef.current || timeLeft === 0 || selectedTool === "wash") return;
 
     let nextMessage = "";
     let fadeTargetId = null;
@@ -391,47 +426,47 @@ function GamePage() {
         };
 
         if (spot.type === "inflamed") {
-          if (selectedTool === "ointment") {
+          if (selectedTool === "moisture") {
             if (spot.treated) {
               nextSpot.wrongCount += 1;
-              nextMessage = "이미 연고 단계예요. 노란 패치 버튼으로 마무리해보세요.";
+              nextMessage = "이미 2단계까지 완료했어요. 3단계 피부장벽 강화로 마무리해 주세요.";
               return nextSpot;
             }
             nextSpot.treated = true;
-            nextMessage = "좋아요. 붉은 화농성을 진정 단계로 바꿨어요.";
+            nextMessage = "좋아요. 붉은 여드름을 진정 단계로 바꿨어요.";
             return nextSpot;
           }
 
-          if (selectedTool === "patch") {
+          if (selectedTool === "barrier") {
             if (spot.treated) {
-              nextSpot.patched = true;
+              nextSpot.protected = true;
               nextSpot.resolved = true;
-              nextMessage = "패치까지 완료! 트러블이 정리됐어요.";
+              nextMessage = "피부장벽 강화까지 완료했어요. 여드름이 정리됐어요.";
               fadeTargetId = spot.id;
               return nextSpot;
             }
             nextSpot.wrongCount += 2;
-            nextMessage = "붉은 스팟은 먼저 빨간 연고 버튼으로 진정시켜주세요.";
+            nextMessage = "붉은 여드름은 2단계 수분/보습을 먼저 터치해 주세요.";
             return nextSpot;
           }
 
           return nextSpot;
         }
 
-        if (selectedTool === "ointment") {
+        if (selectedTool === "moisture") {
           nextSpot.wrongCount += 1;
-          nextMessage = "분홍 비화농성은 연고보다 세안이 더 잘 맞아요.";
+          nextMessage = "분홍 여드름은 2단계보다 1단계 딥클렌징이 더 잘 맞아요.";
           return nextSpot;
         }
 
-        if (selectedTool === "patch") {
+        if (selectedTool === "barrier") {
           nextSpot.wrongCount += 1;
-          nextMessage = "분홍 비화농성은 패치보다 세안이 먼저예요.";
+          nextMessage = "분홍 여드름은 3단계보다 먼저 문질러서 딥클렌징해 주세요.";
           return nextSpot;
         }
 
         return nextSpot;
-      })
+      }),
     );
 
     if (fadeTargetId) triggerFadeOut(fadeTargetId);
@@ -442,9 +477,7 @@ function GamePage() {
     <div style={styles.wrapper}>
       <div style={styles.shell}>
         <div style={styles.topRow}>
-          <button type="button" style={styles.closeButton} onClick={() => navigate("/")}>
-            ✕
-          </button>
+          <button type="button" style={styles.closeButton} onClick={() => navigate("/")}>✕</button>
           <div style={styles.smallStatus}>남은 트러블 {unresolvedCount}개</div>
         </div>
 
@@ -455,6 +488,11 @@ function GamePage() {
               <div style={styles.timerLabel}>TIME</div>
               <div style={styles.timerValue}>{String(timeLeft).padStart(2, "0")}</div>
             </div>
+          </div>
+
+          <div style={styles.quickGuideRow}>
+            <div style={{ ...styles.quickGuideChip, background: "#ffe4f1", color: "#a21c63" }}>분홍 = 문지르기</div>
+            <div style={{ ...styles.quickGuideChip, background: "#ffe4e4", color: "#b91c1c" }}>붉음 = 2단계 → 3단계</div>
           </div>
 
           <div
@@ -495,7 +533,7 @@ function GamePage() {
                     left: `${spot.x}%`,
                     top: `${spot.y}%`,
                   }}
-                  aria-label={spot.type === "inflamed" ? "화농성 트러블" : "비화농성 트러블"}
+                  aria-label={spot.type === "inflamed" ? "붉은 여드름" : "분홍 여드름"}
                 >
                   <span
                     style={{
@@ -512,19 +550,30 @@ function GamePage() {
                 </button>
               );
             })}
-          </div>
 
-          {/* <div style={styles.legendRow}>
-            <div style={styles.legendItem}>
-              <span style={{ ...styles.legendDot, background: "#ef4444" }} /> 화농성
-            </div>
-            <div style={styles.legendItem}>
-              <span style={{ ...styles.legendDot, background: "#f472b6" }} /> 비화농성
-            </div>
-            <div style={styles.legendItem}>
-              <span style={{ ...styles.legendDot, background: "#3b82f6" }} /> 해결됨
-            </div>
-          </div> */}
+            {showGuide && (
+              <div style={styles.guideOverlay}>
+                <div style={styles.guideCard}>
+                  <div style={styles.guideTitle}>시작 전에 이것만 보면 돼요</div>
+                  <div style={styles.guideList}>
+                    {GUIDE_LINES.map((line) => (
+                      <div key={line} style={styles.guideItem}>{line}</div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    style={styles.guideButton}
+                    onClick={() => {
+                      setShowGuide(false);
+                      setStatusMessage("분홍은 문지르기, 붉은 여드름은 2단계 후 3단계로 마무리해 주세요.");
+                    }}
+                  >
+                    바로 시작하기
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div style={styles.bottomHint}>{statusMessage}</div>
         </div>
@@ -540,7 +589,7 @@ function GamePage() {
                   ...styles.toolButton,
                   background: meta.bg,
                   color: meta.color,
-                  border: `2px solid ${active ? "#3b63e6" : meta.border}`,
+                  border: `2px solid ${active ? "#1d4ed8" : meta.border}`,
                   boxShadow: active ? "0 12px 24px rgba(59,99,230,0.18)" : "none",
                 }}
                 onClick={() => setSelectedTool(key)}
@@ -639,6 +688,17 @@ const styles = {
     marginTop: "2px",
     fontVariantNumeric: "tabular-nums",
   },
+  quickGuideRow: {
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+  },
+  quickGuideChip: {
+    borderRadius: "999px",
+    padding: "7px 12px",
+    fontWeight: 800,
+    fontSize: "13px",
+  },
   faceStage: {
     position: "relative",
     minHeight: "360px",
@@ -682,23 +742,49 @@ const styles = {
     borderRadius: "999px",
     transition: "transform 220ms ease, opacity 220ms ease, background 220ms ease, box-shadow 220ms ease",
   },
-  legendRow: {
-    display: "flex",
-    gap: "14px",
-    flexWrap: "wrap",
-    color: "#475569",
+  guideOverlay: {
+    position: "absolute",
+    inset: 0,
+    background: "rgba(15,23,42,0.46)",
+    display: "grid",
+    placeItems: "center",
+    padding: "18px",
+  },
+  guideCard: {
+    width: "100%",
+    maxWidth: "320px",
+    borderRadius: "24px",
+    background: "rgba(255,255,255,0.97)",
+    padding: "18px",
+    boxShadow: "0 20px 48px rgba(15,23,42,0.2)",
+    display: "grid",
+    gap: "12px",
+  },
+  guideTitle: {
+    fontSize: "22px",
+    fontWeight: 900,
+    color: "#0f172a",
+    lineHeight: 1.2,
+  },
+  guideList: { display: "grid", gap: "10px" },
+  guideItem: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: "16px",
+    padding: "10px 12px",
+    color: "#334155",
+    fontSize: "14px",
     fontWeight: 700,
-    fontSize: "13px",
+    lineHeight: 1.4,
   },
-  legendItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-  },
-  legendDot: {
-    width: "10px",
-    height: "10px",
-    borderRadius: "50%",
+  guideButton: {
+    border: "none",
+    borderRadius: "16px",
+    background: "linear-gradient(90deg, #0f1c59 0%, #3b54e6 100%)",
+    color: "#ffffff",
+    padding: "14px 16px",
+    fontWeight: 900,
+    fontSize: "15px",
   },
   bottomHint: {
     borderRadius: "18px",
@@ -716,20 +802,21 @@ const styles = {
   },
   toolButton: {
     borderRadius: "24px",
-    padding: "18px 12px",
-    minHeight: "98px",
+    padding: "16px 10px",
+    minHeight: "102px",
     textAlign: "center",
   },
   toolLabel: {
     fontWeight: 900,
-    fontSize: "26px",
-    lineHeight: 1,
+    fontSize: "18px",
+    lineHeight: 1.2,
+    wordBreak: "keep-all",
   },
   toolSub: {
     marginTop: "8px",
-    fontWeight: 700,
-    fontSize: "15px",
-    opacity: 0.88,
+    fontWeight: 800,
+    fontSize: "14px",
+    opacity: 0.95,
   },
 };
 

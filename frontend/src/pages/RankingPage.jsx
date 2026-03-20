@@ -2,32 +2,78 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const RAW_BASE_CANDIDATES = [
+  import.meta.env.VITE_API_BASE_URL,
+  import.meta.env.VITE_BACKEND_URL,
+  import.meta.env.VITE_API_URL,
+  "",
+]
+  .map((v) => (typeof v === "string" ? v.trim().replace(/\/$/, "") : ""))
+  .filter((v, i, arr) => v || i === arr.lastIndexOf(v));
+
+function buildCandidates(path) {
+  const candidates = RAW_BASE_CANDIDATES.map((base) => (base ? `${base}${path}` : path));
+  return [...new Set(candidates)];
+}
+
+async function requestWithFallback(path) {
+  const candidates = buildCandidates(path);
+  let lastError = null;
+
+  for (const url of candidates) {
+    try {
+      return await axios.get(url, { timeout: 12000 });
+    } catch (error) {
+      lastError = error;
+      const status = error?.response?.status;
+      if (status && status < 500 && status !== 404) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error("request failed");
+}
 
 function RankingPage() {
   const navigate = useNavigate();
   const [rankings, setRankings] = useState([]);
+  const [message, setMessage] = useState("랭킹을 불러오는 중이에요.");
 
   useEffect(() => {
-    const fetchRankings = async () => {
-      if (!API_BASE_URL) return;
+    let cancelled = false;
 
+    const fetchRankings = async () => {
       try {
-        const response = await axios.get(`${API_BASE_URL}/api/rankings?limit=100`);
-        setRankings(Array.isArray(response.data) ? response.data : []);
+        const response = await requestWithFallback("/api/rankings?limit=100");
+        if (cancelled) return;
+
+        const list = Array.isArray(response.data) ? response.data : [];
+        setRankings(list);
+        setMessage(list.length ? "닉네임별 최고 점수 기준이에요." : "아직 저장된 랭킹이 없습니다.");
       } catch (error) {
+        if (cancelled) return;
         console.error("랭킹 조회 실패", error);
+        setMessage(
+          error?.response?.data?.message ||
+            error?.response?.data?.error ||
+            error?.message ||
+            "랭킹 조회에 실패했어요.",
+        );
       }
     };
 
     fetchRankings();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
     <div style={styles.wrapper}>
       <div style={styles.container}>
         <h1 style={styles.title}>전체 랭킹</h1>
-        <p style={styles.subtitle}>닉네임별 최고 점수 기준으로 정렬돼요.</p>
+        <p style={styles.subtitle}>{message}</p>
 
         <div style={styles.list}>
           {rankings.length === 0 ? (
@@ -38,7 +84,7 @@ function RankingPage() {
                 <div style={styles.rank}>{index + 1}</div>
                 <div style={styles.playerInfo}>
                   <div style={styles.nickname}>{item.nickname}</div>
-                  <div style={styles.grade}>{item.grade}</div>
+                  <div style={styles.grade}>{item.grade || item.resultType || "-"}</div>
                 </div>
                 <div style={styles.score}>{item.score}점</div>
               </div>
@@ -62,10 +108,7 @@ const styles = {
     padding: "16px",
     boxSizing: "border-box",
   },
-  container: {
-    maxWidth: "760px",
-    margin: "0 auto",
-  },
+  container: { maxWidth: "760px", margin: "0 auto" },
   title: {
     textAlign: "center",
     fontSize: "34px",
@@ -114,9 +157,7 @@ const styles = {
     fontSize: "18px",
     flexShrink: 0,
   },
-  playerInfo: {
-    flex: 1,
-  },
+  playerInfo: { flex: 1 },
   nickname: {
     fontSize: "20px",
     fontWeight: "800",
