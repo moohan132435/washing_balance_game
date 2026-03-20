@@ -8,45 +8,21 @@ const FACE_SRC = {
 };
 
 const SPOT_BLUEPRINTS = [
-  { id: "spot-1", x: 50, y: 40, type: "inflamed" },
-  { id: "spot-2", x: 42, y: 47, type: "nonInflamed" },
-  { id: "spot-3", x: 58, y: 47, type: "inflamed" },
-  { id: "spot-4", x: 47, y: 55, type: "nonInflamed" },
-  { id: "spot-5", x: 56, y: 58, type: "inflamed" },
-  { id: "spot-6", x: 41, y: 60, type: "nonInflamed" },
-  { id: "spot-7", x: 61, y: 60, type: "nonInflamed" },
-  { id: "spot-8", x: 51, y: 64, type: "inflamed" },
+  { id: "spot-1", x: 50, y: 40, type: "stage1" },
+  { id: "spot-2", x: 42, y: 47, type: "stage2" },
+  { id: "spot-3", x: 58, y: 47, type: "stage2" },
+  { id: "spot-4", x: 47, y: 55, type: "stage1" },
+  { id: "spot-5", x: 56, y: 58, type: "stage2" },
+  { id: "spot-6", x: 41, y: 60, type: "stage1" },
+  { id: "spot-7", x: 61, y: 60, type: "stage2" },
+  { id: "spot-8", x: 51, y: 64, type: "stage1" },
 ];
 
 const TOOL_META = {
-  wash: {
-    label: "1단계 딥클렌징",
-    sub: "문지르기",
-    bg: "#f472b6",
-    color: "#ffffff",
-    border: "#f472b6",
-  },
-  moisture: {
-    label: "2단계 수분/보습",
-    sub: "터치",
-    bg: "#67c8ff",
-    color: "#ffffff",
-    border: "#67c8ff",
-  },
-  barrier: {
-    label: "3단계 피부장벽 강화",
-    sub: "터치",
-    bg: "#f49b72",
-    color: "#ffffff",
-    border: "#f49b72",
-  },
+  stage1: { label: "1단계", title: "딥클렌징", sub: "문지르기", bg: "#d97ab9", border: "#bb4f97", text: "#ffffff" },
+  stage2: { label: "2단계", title: "수분/보습", sub: "터치", bg: "#82c6f5", border: "#5eaee3", text: "#ffffff" },
+  stage3: { label: "3단계", title: "피부장벽 강화", sub: "터치", bg: "#e7a27b", border: "#d88457", text: "#ffffff" },
 };
-
-const GUIDE_LINES = [
-  "분홍 여드름은 1단계 딥클렌징으로 문질러 주세요.",
-  "붉은 여드름은 2단계 수분/보습으로 먼저 진정시켜 주세요.",
-  "진정된 붉은 여드름은 3단계 피부장벽 강화로 마무리해 주세요.",
-];
 
 function shuffle(list) {
   return [...list].sort(() => Math.random() - 0.5);
@@ -55,13 +31,11 @@ function shuffle(list) {
 function buildSpotFromBlueprint(spot) {
   return {
     ...spot,
-    treated: false,
-    protected: false,
+    currentStage: spot.type,
     resolved: false,
     fading: false,
     wrongCount: 0,
-    squeezeCount: 0,
-    washProgress: 0,
+    washCount: 0,
     actionLog: [],
   };
 }
@@ -71,124 +45,92 @@ function buildSpots() {
 }
 
 function getResultType(score) {
-  if (score >= 94) return "피부 응급처치 마스터";
-  if (score >= 78) return "침착한 진정형";
-  if (score >= 56) return "조금만 더 관찰형";
-  return "손부터 가는 압출형";
+  if (score >= 94) return "세안 밸런스 마스터";
+  if (score >= 78) return "안정적인 케어형";
+  if (score >= 56) return "조금만 더 익숙해지면";
+  return "순서부터 익히는 중";
 }
 
 function getResultMessage(score) {
-  if (score >= 94) return "단계를 잘 지켜서 빠르게 정리했어요.";
-  if (score >= 78) return "전체 흐름은 좋았고 몇 번만 더 하면 더 익숙해져요.";
-  if (score >= 56) return "단계만 조금 더 익히면 점수가 훨씬 올라가요.";
-  return "서두르기보다 단계에 맞게 눌러 보는 연습이 필요해요.";
+  if (score >= 94) return "단계를 거의 놓치지 않고 깔끔하게 마무리했어요.";
+  if (score >= 78) return "큰 실수 없이 안정적으로 순서를 잘 맞췄어요.";
+  if (score >= 56) return "조금만 더 익숙해지면 점수가 확 올라가요.";
+  return "색과 순서를 한 번 더 보고 누르면 훨씬 좋아져요.";
 }
 
 function computeScore(spots, timeLeft) {
-  let score = 8;
-  let correct = 0;
-  let partial = 0;
+  let score = 22;
   let wrong = 0;
   let resolved = 0;
 
   spots.forEach((spot) => {
     wrong += spot.wrongCount;
 
-    if (spot.type === "inflamed") {
-      if (spot.treated) {
-        score += 4;
-        partial += 1;
-      }
-      if (spot.protected) {
-        score += 10;
-        correct += 1;
-      }
-      if (spot.resolved) {
-        resolved += 1;
-        score += 3;
-      } else {
-        score -= 8;
-      }
+    if (spot.resolved) {
+      resolved += 1;
+      score += spot.type === "stage1" ? 18 : 22;
+    } else if (spot.type === "stage1" && spot.washCount >= 1) {
+      score += 6;
+    } else if (spot.type === "stage2" && spot.currentStage === "stage3") {
+      score += 8;
     } else {
-      if (spot.resolved) {
-        score += 11;
-        correct += 1;
-        resolved += 1;
-      } else if (spot.washProgress >= 1) {
-        score += 2;
-        partial += 1;
-        score -= 4;
-      } else {
-        score -= 7;
-      }
+      score -= 8;
     }
   });
 
-  score -= wrong * 11;
-  score -= Math.max(0, spots.length - resolved) * 3;
-  score += Math.max(0, Math.min(2, Math.floor(timeLeft / 4)));
+  score -= wrong * 8;
+  score += Math.max(0, Math.min(4, timeLeft));
   score = Math.max(0, Math.min(100, Math.round(score)));
-  return { score, correct, partial, wrong, resolved };
+
+  return { score, wrong, resolved };
 }
 
 function getSpotView(spot) {
   const fadedOpacity = spot.fading ? 0 : 1;
-  const fadedScale = spot.fading ? 0.52 : 1;
+  const fadedScale = spot.fading ? 0.56 : 1;
 
   if (spot.resolved) {
     return {
-      size: 10,
-      hitSize: 24,
-      color: "rgba(59,130,246,0.94)",
-      ring: "0 0 0 2px rgba(191,219,254,0.5)",
-      border: "2px solid rgba(255,255,255,0.9)",
+      size: 11,
+      hitSize: 26,
+      color: "rgba(231,162,123,0.95)",
+      ring: "0 0 0 3px rgba(255,229,213,0.92)",
+      border: "2px solid rgba(255,255,255,0.96)",
       opacity: fadedOpacity,
       scale: fadedScale,
     };
   }
 
-  if (spot.type === "inflamed") {
-    if (spot.treated) {
-      return {
-        size: 11,
-        hitSize: 26,
-        color: "rgba(103,200,255,0.95)",
-        ring: "0 0 0 3px rgba(191,232,255,0.52)",
-        border: "2px solid rgba(255,255,255,0.96)",
-        opacity: 1,
-        scale: 1,
-      };
-    }
-
+  if (spot.currentStage === "stage3") {
     return {
       size: 12,
       hitSize: 28,
-      color: "rgba(239,68,68,0.95)",
-      ring: "0 0 0 3px rgba(254,202,202,0.46)",
-      border: "2px solid rgba(255,241,242,0.96)",
+      color: "rgba(231,162,123,0.96)",
+      ring: "0 0 0 3px rgba(255,229,213,0.82)",
+      border: "2px solid rgba(255,248,244,0.98)",
       opacity: 1,
       scale: 1,
     };
   }
 
-  if (spot.washProgress >= 1) {
+  if (spot.currentStage === "stage2") {
     return {
-      size: 10,
-      hitSize: 24,
-      color: "rgba(244,114,182,0.82)",
-      ring: "0 0 0 3px rgba(251,207,232,0.4)",
-      border: "2px solid rgba(255,255,255,0.95)",
+      size: 12,
+      hitSize: 28,
+      color: "rgba(130,198,245,0.96)",
+      ring: "0 0 0 3px rgba(226,243,255,0.9)",
+      border: "2px solid rgba(255,255,255,0.98)",
       opacity: 1,
-      scale: 0.86,
+      scale: 1,
     };
   }
 
   return {
-    size: 11,
-    hitSize: 26,
-    color: "rgba(244,114,182,0.95)",
-    ring: "0 0 0 3px rgba(251,207,232,0.44)",
-    border: "2px solid rgba(255,255,255,0.95)",
+    size: 12,
+    hitSize: 28,
+    color: "rgba(217,122,185,0.96)",
+    ring: "0 0 0 3px rgba(253,231,242,0.92)",
+    border: "2px solid rgba(255,255,255,0.98)",
     opacity: 1,
     scale: 1,
   };
@@ -203,10 +145,6 @@ function getPointerPosition(event, element) {
   return { x, y };
 }
 
-function persistResult(result) {
-  localStorage.setItem("latestGameResult", JSON.stringify(result));
-}
-
 function GamePage() {
   const navigate = useNavigate();
   const faceStageRef = useRef(null);
@@ -214,20 +152,18 @@ function GamePage() {
   const finishedRef = useRef(false);
   const spawnIntervalRef = useRef(null);
   const timeLeftRef = useRef(TOTAL_TIME);
-
-  const nickname = localStorage.getItem("nickname") || "PLAYER";
   const selectedFaceKey = localStorage.getItem("selectedFaceKey");
+  const nickname = localStorage.getItem("nickname") || "PLAYER";
+
   const [faceKey] = useState(() =>
-    selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female",
+    selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female"
   );
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
-  const [selectedTool, setSelectedTool] = useState("wash");
+  const [selectedTool, setSelectedTool] = useState("stage1");
   const [spots, setSpots] = useState(() => buildSpots());
-  const [statusMessage, setStatusMessage] = useState(
-    "분홍은 문지르기, 붉은 여드름은 2단계 후 3단계로 마무리해 주세요.",
-  );
+  const [statusMessage, setStatusMessage] = useState("분홍은 문지르기, 하늘은 2단계 터치, 살구는 3단계 터치.");
   const [foamPoints, setFoamPoints] = useState([]);
-  const [showGuide, setShowGuide] = useState(true);
+  const [isGuideOpen, setIsGuideOpen] = useState(true);
   const [isRubbing, setIsRubbing] = useState(false);
 
   const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved).length, [spots]);
@@ -239,40 +175,12 @@ function GamePage() {
     }, 40);
   };
 
-  const finishGame = (currentSpots, remainingTime) => {
-    if (finishedRef.current) return;
-    finishedRef.current = true;
-
-    const { score, correct, partial, wrong, resolved } = computeScore(currentSpots, remainingTime);
-    const resultType = getResultType(score);
-    const nextResult = {
-      nickname,
-      score,
-      grade: resultType,
-      resultType,
-      resultMessage: getResultMessage(score),
-      scenarioSummary: `해결 ${resolved}/${currentSpots.length} · 오답 ${wrong}회`,
-      ctaText: "와디즈 보러가기",
-      careStats: {
-        totalSpots: currentSpots.length,
-        resolved,
-        correct,
-        partial,
-        wrong,
-      },
-      currentAttemptAt: new Date().toISOString(),
-    };
-
-    persistResult(nextResult);
-    navigate("/result", { replace: true, state: nextResult });
-  };
-
   const spawnSpot = () => {
     setSpots((prev) => {
       const activeIds = new Set(prev.filter((spot) => !spot.fading && !spot.resolved).map((spot) => spot.id));
       const candidate = shuffle(SPOT_BLUEPRINTS).find((blueprint) => !activeIds.has(blueprint.id));
       if (!candidate) return prev;
-      setStatusMessage("새 여드름이 올라왔어요. 색을 보고 맞는 단계로 처리해 주세요.");
+      setStatusMessage("새 세안 포인트가 생겼어요. 색에 맞는 단계로 처리해 주세요.");
       return [...prev, buildSpotFromBlueprint(candidate)];
     });
   };
@@ -283,28 +191,42 @@ function GamePage() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (finishedRef.current) return;
-      setTimeLeft((prev) => {
-        if (prev <= 1) return 0;
-        return prev - 1;
-      });
+      if (finishedRef.current || isGuideOpen) return;
+      setTimeLeft((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, []);
+  }, [isGuideOpen]);
 
   useEffect(() => {
     timeLeftRef.current = timeLeft;
-    if (!finishedRef.current && timeLeft === 0) {
-      finishGame(spots, 0);
-    }
-  }, [timeLeft, spots]);
+  }, [timeLeft]);
 
   useEffect(() => {
-    if (!finishedRef.current && unresolvedCount === 0) {
-      finishGame(spots, timeLeft);
+    if (finishedRef.current || isGuideOpen) return;
+
+    if (timeLeft === 0 || unresolvedCount === 0) {
+      finishedRef.current = true;
+      const { score, wrong, resolved } = computeScore(spots, timeLeft);
+      const resultType = getResultType(score);
+      const payload = {
+        nickname,
+        score,
+        grade: resultType,
+        resultType,
+        resultMessage: getResultMessage(score),
+        scenarioSummary: `정리 ${resolved}/${spots.length} · 오답 ${wrong}회`,
+        ctaText: "와디즈 보러가기",
+        currentAttemptAt: new Date().toISOString(),
+      };
+
+      localStorage.setItem("lastGameResult", JSON.stringify(payload));
+      navigate("/result", {
+        replace: true,
+        state: payload,
+      });
     }
-  }, [spots, unresolvedCount, timeLeft]);
+  }, [isGuideOpen, navigate, nickname, spots, timeLeft, unresolvedCount]);
 
   useEffect(() => {
     if (!foamPoints.length) return undefined;
@@ -323,7 +245,7 @@ function GamePage() {
     }
 
     spawnIntervalRef.current = window.setInterval(() => {
-      if (finishedRef.current || timeLeftRef.current <= 0) return;
+      if (finishedRef.current || isGuideOpen || timeLeftRef.current <= 0) return;
       if (Math.random() < 0.88) {
         spawnSpot();
       }
@@ -335,9 +257,9 @@ function GamePage() {
         spawnIntervalRef.current = null;
       }
     };
-  }, []);
+  }, [isGuideOpen]);
 
-  const applyWash = (position) => {
+  const applyStage1 = (position) => {
     if (!position) return;
 
     const faceCenterX = 50;
@@ -357,7 +279,7 @@ function GamePage() {
 
     setSpots((prev) =>
       prev.map((spot) => {
-        if (spot.resolved) return spot;
+        if (spot.resolved || spot.currentStage !== "stage1") return spot;
 
         const distance = Math.hypot(position.x - spot.x, position.y - spot.y);
         const lastRubAt = lastRubAtRef.current.get(spot.id) || 0;
@@ -365,237 +287,196 @@ function GamePage() {
         if (distance > 6 || Date.now() - lastRubAt < 120) return spot;
         lastRubAtRef.current.set(spot.id, Date.now());
 
-        if (spot.type === "nonInflamed") {
-          const nextProgress = Math.min(2, spot.washProgress + 1);
-          const resolved = nextProgress >= 2;
-          const nextSpot = {
-            ...spot,
-            actionLog: [...spot.actionLog, "wash"],
-            washProgress: nextProgress,
-            resolved,
-          };
-
-          setStatusMessage(
-            resolved
-              ? "분홍 여드름이 딥클렌징으로 정리됐어요."
-              : "좋아요. 분홍 여드름을 한 번 더 문질러 마무리해 주세요.",
-          );
-
-          if (resolved) triggerFadeOut(spot.id);
-          return nextSpot;
-        }
-
-        setStatusMessage("붉은 여드름은 문지르기보다 2단계 수분/보습이 먼저예요.");
-        return {
+        const nextWashCount = Math.min(2, spot.washCount + 1);
+        const resolved = nextWashCount >= 2;
+        const nextSpot = {
           ...spot,
-          wrongCount: spot.wrongCount + 1,
-          actionLog: [...spot.actionLog, "wash"],
+          washCount: nextWashCount,
+          resolved,
+          actionLog: [...spot.actionLog, "stage1"],
         };
-      }),
+
+        setStatusMessage(resolved ? "분홍 포인트 정리 완료." : "좋아요. 한 번 더 문질러 마무리해 주세요.");
+
+        if (resolved) triggerFadeOut(spot.id);
+        return nextSpot;
+      })
     );
   };
 
-  const handleRubStart = (event) => {
-    if (showGuide || selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
+  const handleFacePointerDown = (event) => {
+    if (isGuideOpen) return;
+    if (selectedTool !== "stage1") return;
     setIsRubbing(true);
-    applyWash(getPointerPosition(event, faceStageRef.current));
+    applyStage1(getPointerPosition(event, faceStageRef.current));
   };
 
-  const handleRubMove = (event) => {
-    if (showGuide || !isRubbing || selectedTool !== "wash" || finishedRef.current || timeLeft === 0) return;
-    applyWash(getPointerPosition(event, faceStageRef.current));
+  const handleFacePointerMove = (event) => {
+    if (isGuideOpen) return;
+    if (!isRubbing || selectedTool !== "stage1") return;
+    applyStage1(getPointerPosition(event, faceStageRef.current));
   };
 
-  const handleRubEnd = () => {
+  const handleFacePointerUp = () => {
     setIsRubbing(false);
   };
 
-  const handleSpotClick = (spotId) => {
-    if (showGuide || finishedRef.current || timeLeft === 0 || selectedTool === "wash") return;
-
-    let nextMessage = "";
-    let fadeTargetId = null;
-
+  const handleSpotPress = (spotId) => {
+    if (isGuideOpen) return;
     setSpots((prev) =>
       prev.map((spot) => {
         if (spot.id !== spotId || spot.resolved) return spot;
 
-        const nextSpot = {
-          ...spot,
-          actionLog: [...spot.actionLog, selectedTool],
-        };
-
-        if (spot.type === "inflamed") {
-          if (selectedTool === "moisture") {
-            if (spot.treated) {
-              nextSpot.wrongCount += 1;
-              nextMessage = "이미 2단계까지 완료했어요. 3단계 피부장벽 강화로 마무리해 주세요.";
-              return nextSpot;
-            }
-            nextSpot.treated = true;
-            nextMessage = "좋아요. 붉은 여드름을 진정 단계로 바꿨어요.";
-            return nextSpot;
+        if (spot.currentStage === "stage2") {
+          if (selectedTool !== "stage2") {
+            setStatusMessage("하늘 포인트는 2단계 수분/보습을 먼저 눌러 주세요.");
+            return { ...spot, wrongCount: spot.wrongCount + 1 };
           }
 
-          if (selectedTool === "barrier") {
-            if (spot.treated) {
-              nextSpot.protected = true;
-              nextSpot.resolved = true;
-              nextMessage = "피부장벽 강화까지 완료했어요. 여드름이 정리됐어요.";
-              fadeTargetId = spot.id;
-              return nextSpot;
-            }
-            nextSpot.wrongCount += 2;
-            nextMessage = "붉은 여드름은 2단계 수분/보습을 먼저 터치해 주세요.";
-            return nextSpot;
+          setStatusMessage("좋아요. 이제 살구 포인트가 됐어요. 3단계로 마무리해 주세요.");
+          return {
+            ...spot,
+            currentStage: "stage3",
+            actionLog: [...spot.actionLog, "stage2"],
+          };
+        }
+
+        if (spot.currentStage === "stage3") {
+          if (selectedTool !== "stage3") {
+            setStatusMessage("살구 포인트는 3단계 피부장벽 강화로 마무리해 주세요.");
+            return { ...spot, wrongCount: spot.wrongCount + 1 };
           }
 
-          return nextSpot;
+          triggerFadeOut(spot.id);
+          setStatusMessage("살구 포인트까지 깔끔하게 마무리했어요.");
+          return {
+            ...spot,
+            resolved: true,
+            actionLog: [...spot.actionLog, "stage3"],
+          };
         }
 
-        if (selectedTool === "moisture") {
-          nextSpot.wrongCount += 1;
-          nextMessage = "분홍 여드름은 2단계보다 1단계 딥클렌징이 더 잘 맞아요.";
-          return nextSpot;
-        }
-
-        if (selectedTool === "barrier") {
-          nextSpot.wrongCount += 1;
-          nextMessage = "분홍 여드름은 3단계보다 먼저 문질러서 딥클렌징해 주세요.";
-          return nextSpot;
-        }
-
-        return nextSpot;
-      }),
+        setStatusMessage("분홍 포인트는 버튼이 아니라 얼굴을 문질러서 처리해 주세요.");
+        return { ...spot, wrongCount: spot.wrongCount + 1 };
+      })
     );
-
-    if (fadeTargetId) triggerFadeOut(fadeTargetId);
-    if (nextMessage) setStatusMessage(nextMessage);
   };
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.shell}>
-        <div style={styles.topRow}>
-          <button type="button" style={styles.closeButton} onClick={() => navigate("/")}>✕</button>
-          <div style={styles.smallStatus}>남은 트러블 {unresolvedCount}개</div>
+      <div style={styles.card}>
+        <div style={styles.topBar}>
+          <button type="button" style={styles.backButton} onClick={() => navigate("/")}>✕</button>
+          <div style={styles.topInfo}>남은 포인트 {unresolvedCount}개</div>
         </div>
 
-        <div style={styles.stageCard}>
-          <div style={styles.stageHeader}>
-            <h1 style={styles.title}>이 여드름, 어떻게 할까?</h1>
-            <div style={styles.timerBox}>
-              <div style={styles.timerLabel}>TIME</div>
-              <div style={styles.timerValue}>{String(timeLeft).padStart(2, "0")}</div>
+        <div style={styles.headerRow}>
+          <div>
+            <h1 style={styles.title}>이 부위, 어떻게 씻을까?</h1>
+          </div>
+          <div style={styles.timerBox}>
+            <div style={styles.timerLabel}>TIME</div>
+            <div style={styles.timerValue}>{String(timeLeft).padStart(2, "0")}</div>
+          </div>
+        </div>
+
+        <div style={styles.tipRow}>
+          <div style={{ ...styles.tipChip, background: "#fde7f2", color: "#b83280" }}>분홍 = 문지르기</div>
+          <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>하늘 = 2단계 터치</div>
+          <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>살구 = 3단계 터치</div>
+        </div>
+
+        {isGuideOpen && (
+          <div style={styles.guideOverlay}>
+            <div style={styles.guideCard}>
+              <div style={styles.guideTitle}>시작 전에 이것만 보면 돼요</div>
+              <div style={styles.guideLine}>분홍은 문지르기</div>
+              <div style={styles.guideLine}>하늘은 2단계 터치</div>
+              <div style={styles.guideLine}>살구는 3단계 터치</div>
+              <button type="button" style={styles.guideButton} onClick={() => setIsGuideOpen(false)}>바로 시작하기</button>
             </div>
           </div>
+        )}
 
-          <div style={styles.quickGuideRow}>
-            <div style={{ ...styles.quickGuideChip, background: "#ffe4f1", color: "#a21c63" }}>분홍 = 문지르기</div>
-            <div style={{ ...styles.quickGuideChip, background: "#ffe4e4", color: "#b91c1c" }}>붉음 = 2단계 → 3단계</div>
-          </div>
+        <div
+          ref={faceStageRef}
+          style={styles.faceFrame}
+          onMouseDown={handleFacePointerDown}
+          onMouseMove={handleFacePointerMove}
+          onMouseUp={handleFacePointerUp}
+          onMouseLeave={handleFacePointerUp}
+          onTouchStart={handleFacePointerDown}
+          onTouchMove={handleFacePointerMove}
+          onTouchEnd={handleFacePointerUp}
+        >
+          <img src={faceSrc} alt="game face" style={styles.faceImage} draggable={false} />
 
-          <div
-            ref={faceStageRef}
-            style={styles.faceStage}
-            onMouseDown={handleRubStart}
-            onMouseMove={handleRubMove}
-            onMouseUp={handleRubEnd}
-            onMouseLeave={handleRubEnd}
-            onTouchStart={handleRubStart}
-            onTouchMove={handleRubMove}
-            onTouchEnd={handleRubEnd}
-          >
-            <img src={faceSrc} alt="게임 얼굴" style={styles.faceImage} draggable={false} />
-
-            {foamPoints.map((point) => (
-              <span
-                key={point.id}
-                style={{
-                  ...styles.foamDot,
-                  left: `${point.x}%`,
-                  top: `${point.y}%`,
-                }}
-              />
-            ))}
-
-            {spots.map((spot) => {
-              const view = getSpotView(spot);
-              return (
-                <button
-                  key={spot.id}
-                  type="button"
-                  onClick={() => handleSpotClick(spot.id)}
-                  style={{
-                    ...styles.spotButton,
-                    width: `${view.hitSize}px`,
-                    height: `${view.hitSize}px`,
-                    left: `${spot.x}%`,
-                    top: `${spot.y}%`,
-                  }}
-                  aria-label={spot.type === "inflamed" ? "붉은 여드름" : "분홍 여드름"}
-                >
-                  <span
-                    style={{
-                      ...styles.spotVisual,
-                      width: `${view.size}px`,
-                      height: `${view.size}px`,
-                      background: view.color,
-                      boxShadow: view.ring,
-                      border: view.border,
-                      opacity: view.opacity,
-                      transform: `translate(-50%, -50%) scale(${view.scale})`,
-                    }}
-                  />
-                </button>
-              );
-            })}
-
-            {showGuide && (
-              <div style={styles.guideOverlay}>
-                <div style={styles.guideCard}>
-                  <div style={styles.guideTitle}>시작 전에 이것만 보면 돼요</div>
-                  <div style={styles.guideList}>
-                    {GUIDE_LINES.map((line) => (
-                      <div key={line} style={styles.guideItem}>{line}</div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    style={styles.guideButton}
-                    onClick={() => {
-                      setShowGuide(false);
-                      setStatusMessage("분홍은 문지르기, 붉은 여드름은 2단계 후 3단계로 마무리해 주세요.");
-                    }}
-                  >
-                    바로 시작하기
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div style={styles.bottomHint}>{statusMessage}</div>
-        </div>
-
-        <div style={styles.toolGrid}>
-          {Object.entries(TOOL_META).map(([key, meta]) => {
-            const active = selectedTool === key;
+          {spots.map((spot) => {
+            const view = getSpotView(spot);
             return (
               <button
-                key={key}
+                key={spot.id}
                 type="button"
+                onClick={() => handleSpotPress(spot.id)}
+                style={{
+                  ...styles.spot,
+                  width: `${view.hitSize}px`,
+                  height: `${view.hitSize}px`,
+                  left: `${spot.x}%`,
+                  top: `${spot.y}%`,
+                  opacity: view.opacity,
+                  transform: `translate(-50%, -50%) scale(${view.scale})`,
+                  boxShadow: view.ring,
+                  pointerEvents: spot.fading ? "none" : "auto",
+                }}
+              >
+                <span
+                  style={{
+                    width: `${view.size}px`,
+                    height: `${view.size}px`,
+                    borderRadius: "999px",
+                    background: view.color,
+                    border: view.border,
+                    display: "block",
+                  }}
+                />
+              </button>
+            );
+          })}
+
+          {foamPoints.map((point) => (
+            <span
+              key={point.id}
+              style={{
+                ...styles.foam,
+                left: `${point.x}%`,
+                top: `${point.y}%`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div style={styles.statusBox}>{statusMessage}</div>
+
+        <div style={styles.toolGrid}>
+          {Object.entries(TOOL_META).map(([toolKey, meta]) => {
+            const active = selectedTool === toolKey;
+            return (
+              <button
+                key={toolKey}
+                type="button"
+                onClick={() => setSelectedTool(toolKey)}
                 style={{
                   ...styles.toolButton,
                   background: meta.bg,
-                  color: meta.color,
-                  border: `2px solid ${active ? "#1d4ed8" : meta.border}`,
-                  boxShadow: active ? "0 12px 24px rgba(59,99,230,0.18)" : "none",
+                  borderColor: active ? "#3158d8" : meta.border,
+                  boxShadow: active ? "0 0 0 4px rgba(49,88,216,0.16)" : "none",
+                  transform: active ? "translateY(-2px)" : "none",
                 }}
-                onClick={() => setSelectedTool(key)}
               >
-                <div style={styles.toolLabel}>{meta.label}</div>
-                <div style={styles.toolSub}>{meta.sub}</div>
+                <div style={{ ...styles.toolLabel, color: meta.text }}>{meta.label}</div>
+                <div style={{ ...styles.toolTitle, color: meta.text }}>{meta.title}</div>
+                <div style={{ ...styles.toolSub, color: meta.text }}>{meta.sub}</div>
               </button>
             );
           })}
@@ -608,215 +489,211 @@ function GamePage() {
 const styles = {
   wrapper: {
     minHeight: "100svh",
-    background: "linear-gradient(180deg, #edf3ff 0%, #f7fbff 100%)",
+    background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%)",
     padding: "10px",
     boxSizing: "border-box",
   },
-  shell: {
-    maxWidth: "520px",
-    minHeight: "calc(100svh - 20px)",
+  card: {
+    width: "min(520px, calc(100vw - 20px))",
     margin: "0 auto",
+    background: "rgba(255,255,255,0.96)",
+    borderRadius: "30px",
+    padding: "16px",
+    boxShadow: "0 20px 48px rgba(15,23,42,0.1)",
+    border: "1px solid rgba(219,228,240,0.9)",
     display: "grid",
-    gridTemplateRows: "auto minmax(0, 1fr) auto",
-    gap: "10px",
+    gap: "14px",
+    position: "relative",
   },
-  topRow: {
+  topBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "12px",
   },
-  closeButton: {
-    width: "44px",
-    height: "44px",
-    borderRadius: "14px",
-    border: "1px solid #d4deed",
-    background: "#f8fbff",
+  backButton: {
+    width: "58px",
+    height: "58px",
+    borderRadius: "20px",
+    border: "1px solid #dbe4f0",
+    background: "#ffffff",
     color: "#0f172a",
-    fontSize: "22px",
+    fontSize: "24px",
     fontWeight: 900,
   },
-  smallStatus: {
-    flex: 1,
-    textAlign: "right",
-    color: "#475569",
-    fontWeight: 800,
-    fontSize: "15px",
+  topInfo: {
+    color: "#334155",
+    fontWeight: 900,
+    fontSize: "18px",
   },
-  stageCard: {
-    background: "rgba(255,255,255,0.98)",
-    borderRadius: "28px",
-    border: "1px solid #dae4f0",
-    boxShadow: "0 18px 42px rgba(15,23,42,0.08)",
-    padding: "14px",
+  headerRow: {
     display: "grid",
-    gap: "10px",
-  },
-  stageHeader: {
-    display: "grid",
-    gridTemplateColumns: "1fr auto",
+    gridTemplateColumns: "minmax(0, 1fr) auto",
     gap: "12px",
     alignItems: "start",
   },
   title: {
     margin: 0,
     color: "#0f172a",
+    fontSize: "clamp(34px, 10vw, 58px)",
+    lineHeight: 0.95,
+    letterSpacing: "-0.06em",
     fontWeight: 900,
-    fontSize: "clamp(28px, 7vw, 44px)",
-    letterSpacing: "-0.05em",
-    lineHeight: 1.02,
+    wordBreak: "keep-all",
   },
   timerBox: {
-    minWidth: "92px",
-    borderRadius: "22px",
-    padding: "10px 12px",
-    background: "linear-gradient(180deg, #0b1434 0%, #0f172a 100%)",
+    minWidth: "118px",
+    borderRadius: "24px",
+    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+    padding: "12px 14px",
     textAlign: "center",
-    boxShadow: "0 14px 28px rgba(15,23,42,0.22)",
   },
   timerLabel: {
-    color: "#9db6ff",
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 900,
-    letterSpacing: "0.28em",
+    color: "#c7d2fe",
+    letterSpacing: "0.22em",
   },
   timerValue: {
-    color: "#f8d94c",
-    fontSize: "40px",
-    fontWeight: 900,
+    fontSize: "44px",
     lineHeight: 1,
-    marginTop: "2px",
-    fontVariantNumeric: "tabular-nums",
+    fontWeight: 900,
+    marginTop: "4px",
+    color: "#f8e77c",
   },
-  quickGuideRow: {
+  tipRow: {
     display: "flex",
-    gap: "8px",
     flexWrap: "wrap",
+    gap: "8px",
   },
-  quickGuideChip: {
+  tipChip: {
+    padding: "10px 14px",
     borderRadius: "999px",
-    padding: "7px 12px",
-    fontWeight: 800,
+    fontWeight: 900,
     fontSize: "13px",
-  },
-  faceStage: {
-    position: "relative",
-    minHeight: "360px",
-    borderRadius: "28px",
-    overflow: "hidden",
-    background: "linear-gradient(180deg, #dcdcdc 0%, #cfcfcf 100%)",
-    userSelect: "none",
-    touchAction: "none",
-  },
-  faceImage: {
-    position: "absolute",
-    inset: 0,
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    pointerEvents: "none",
-  },
-  foamDot: {
-    position: "absolute",
-    width: "18px",
-    height: "18px",
-    borderRadius: "50%",
-    background:
-      "radial-gradient(circle at 30% 30%, #ffffff 0%, #ffffff 35%, rgba(255,255,255,0.68) 60%, rgba(255,255,255,0) 100%)",
-    transform: "translate(-50%, -50%)",
-    pointerEvents: "none",
-    boxShadow: "0 0 8px rgba(255,255,255,0.65)",
-  },
-  spotButton: {
-    position: "absolute",
-    transform: "translate(-50%, -50%)",
-    border: "none",
-    background: "transparent",
-    padding: 0,
-    cursor: "pointer",
-  },
-  spotVisual: {
-    position: "absolute",
-    left: "50%",
-    top: "50%",
-    borderRadius: "999px",
-    transition: "transform 220ms ease, opacity 220ms ease, background 220ms ease, box-shadow 220ms ease",
   },
   guideOverlay: {
     position: "absolute",
-    inset: 0,
-    background: "rgba(15,23,42,0.46)",
-    display: "grid",
-    placeItems: "center",
-    padding: "18px",
+    inset: "120px 16px auto 16px",
+    zIndex: 10,
   },
   guideCard: {
-    width: "100%",
-    maxWidth: "320px",
-    borderRadius: "24px",
     background: "rgba(255,255,255,0.97)",
+    borderRadius: "28px",
     padding: "18px",
-    boxShadow: "0 20px 48px rgba(15,23,42,0.2)",
+    border: "1px solid #dbe4f0",
+    boxShadow: "0 18px 40px rgba(15,23,42,0.18)",
     display: "grid",
     gap: "12px",
   },
   guideTitle: {
-    fontSize: "22px",
-    fontWeight: 900,
     color: "#0f172a",
-    lineHeight: 1.2,
+    fontSize: "20px",
+    fontWeight: 900,
+    textAlign: "center",
   },
-  guideList: { display: "grid", gap: "10px" },
-  guideItem: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "16px",
-    padding: "10px 12px",
+  guideLine: {
+    minHeight: "54px",
+    borderRadius: "18px",
+    border: "1px solid #dbe4f0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 12px",
     color: "#334155",
-    fontSize: "14px",
-    fontWeight: 700,
-    lineHeight: 1.4,
+    fontWeight: 900,
+    fontSize: "18px",
+    background: "#ffffff",
+    textAlign: "center",
+    whiteSpace: "nowrap",
   },
   guideButton: {
+    width: "100%",
+    minHeight: "62px",
     border: "none",
-    borderRadius: "16px",
-    background: "linear-gradient(90deg, #0f1c59 0%, #3b54e6 100%)",
+    borderRadius: "22px",
+    background: "linear-gradient(90deg, #24348f 0%, #4760ea 100%)",
     color: "#ffffff",
-    padding: "14px 16px",
+    fontSize: "18px",
     fontWeight: 900,
-    fontSize: "15px",
   },
-  bottomHint: {
-    borderRadius: "18px",
-    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+  faceFrame: {
+    position: "relative",
+    borderRadius: "28px",
+    overflow: "hidden",
+    background: "#d2d7de",
+    aspectRatio: "1 / 1.06",
+    touchAction: "none",
+    userSelect: "none",
+  },
+  faceImage: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  },
+  spot: {
+    position: "absolute",
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    borderRadius: "999px",
+    display: "grid",
+    placeItems: "center",
+    transition: "transform 0.18s ease, opacity 0.2s ease",
+  },
+  foam: {
+    position: "absolute",
+    width: "18px",
+    height: "18px",
+    borderRadius: "999px",
+    transform: "translate(-50%, -50%)",
+    background: "rgba(255,255,255,0.9)",
+    boxShadow: "0 0 0 2px rgba(255,255,255,0.5), 0 6px 12px rgba(255,255,255,0.45)",
+    pointerEvents: "none",
+  },
+  statusBox: {
+    borderRadius: "22px",
+    background: "#0f172a",
     color: "#ffffff",
-    padding: "14px 16px",
-    fontSize: "15px",
-    fontWeight: 700,
+    padding: "18px 16px",
+    fontSize: "16px",
     lineHeight: 1.45,
+    fontWeight: 800,
+    wordBreak: "keep-all",
+    minHeight: "84px",
+    display: "flex",
+    alignItems: "center",
   },
   toolGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
-    gap: "10px",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "12px",
   },
   toolButton: {
-    borderRadius: "24px",
-    padding: "16px 10px",
-    minHeight: "102px",
-    textAlign: "center",
+    minHeight: "154px",
+    borderRadius: "28px",
+    border: "3px solid transparent",
+    padding: "14px 10px",
+    display: "grid",
+    alignContent: "center",
+    gap: "8px",
   },
   toolLabel: {
-    fontWeight: 900,
     fontSize: "18px",
-    lineHeight: 1.2,
+    fontWeight: 900,
+    textAlign: "center",
+  },
+  toolTitle: {
+    fontSize: "18px",
+    lineHeight: 1.15,
+    fontWeight: 900,
+    textAlign: "center",
     wordBreak: "keep-all",
   },
   toolSub: {
-    marginTop: "8px",
-    fontWeight: 800,
     fontSize: "14px",
-    opacity: 0.95,
+    fontWeight: 800,
+    textAlign: "center",
   },
 };
 

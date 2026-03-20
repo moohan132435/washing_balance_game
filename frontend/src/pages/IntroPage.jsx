@@ -41,9 +41,11 @@ function IntroPage() {
   return (
     <div style={styles.wrapper}>
       <div style={styles.card}>
-        <div style={styles.badge}>10초 피부 판단 게임</div>
-        <h1 style={styles.title}>이 여드름, 어떻게 할까?</h1>
-        <p style={styles.subtitle}>화농성인지 비화농성인지 보고 세안 · 연고 · 패치 · 압출 중 더 나은 선택을 해보세요.</p>
+        <div style={styles.badge}>10초 세안 밸런스 게임</div>
+        <h1 style={styles.title}>세안 순서를 맞춰볼까?</h1>
+        <p style={styles.subtitle}>
+          분홍 포인트는 문지르고, 하늘 포인트는 2단계 터치, 살구 포인트는 3단계 터치로 마무리해보세요.
+        </p>
 
         <div style={styles.heroFrame}>
           <img src={selectedFace.src} alt={selectedFace.label} style={styles.heroImage} />
@@ -70,20 +72,11 @@ function IntroPage() {
           })}
         </div>
 
-        {/* <div style={styles.stepGrid}>
-          <div style={styles.stepCard}>
-            <div style={styles.stepNumber}>1</div>
-            <div style={styles.stepText}>피부 상태 보기</div>
-          </div>
-          <div style={styles.stepCard}>
-            <div style={styles.stepNumber}>2</div>
-            <div style={styles.stepText}>관리 방법 선택</div>
-          </div>
-          <div style={styles.stepCard}>
-            <div style={styles.stepNumber}>3</div>
-            <div style={styles.stepText}>점수 확인</div>
-          </div>
-        </div> */}
+        <div style={styles.tipRow}>
+          <div style={{ ...styles.tipChip, background: "#fde7f2", color: "#b83280" }}>1단계 분홍 = 문지르기</div>
+          <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>2단계 하늘 = 터치</div>
+          <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>3단계 살구 = 터치</div>
+        </div>
 
         <input
           type="text"
@@ -133,10 +126,11 @@ const styles = {
     margin: 0,
     textAlign: "center",
     color: "#0f172a",
-    fontSize: "clamp(32px, 8vw, 54px)",
-    lineHeight: 1.02,
+    fontSize: "clamp(30px, 8vw, 50px)",
+    lineHeight: 1.05,
     letterSpacing: "-0.05em",
     fontWeight: 900,
+    wordBreak: "keep-all",
   },
   subtitle: {
     margin: 0,
@@ -173,40 +167,17 @@ const styles = {
     fontWeight: 900,
     color: "#0f172a",
   },
-  stepGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, 1fr)",
-    gap: "10px",
-  },
-  stepCard: {
-    borderRadius: "20px",
-    background: "#f8fafc",
-    border: "1px solid #dbe4f0",
-    padding: "12px 8px",
-    textAlign: "center",
-    minHeight: "100px",
-    display: "grid",
-    alignContent: "center",
+  tipRow: {
+    display: "flex",
+    flexWrap: "wrap",
     gap: "8px",
+    justifyContent: "center",
   },
-  stepNumber: {
-    width: "42px",
-    height: "42px",
-    borderRadius: "50%",
-    margin: "0 auto",
-    display: "grid",
-    placeItems: "center",
-    background: "#3b63e6",
-    color: "#fff",
+  tipChip: {
+    padding: "10px 12px",
+    borderRadius: "999px",
     fontWeight: 900,
-    fontSize: "26px",
-  },
-  stepText: {
-    color: "#1e293b",
-    fontSize: "14px",
-    fontWeight: 800,
-    lineHeight: 1.35,
-    wordBreak: "keep-all",
+    fontSize: "13px",
   },
   input: {
     width: "100%",
