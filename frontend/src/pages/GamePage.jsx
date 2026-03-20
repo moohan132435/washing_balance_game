@@ -161,7 +161,7 @@ function GamePage() {
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
   const [selectedTool, setSelectedTool] = useState("stage1");
   const [spots, setSpots] = useState(() => buildSpots());
-  const [statusMessage, setStatusMessage] = useState("분홍은 문지르기, 하늘은 2단계 터치, 살구는 3단계 터치.");
+  const [statusMessage, setStatusMessage] = useState("분홍은 문지르기, 하늘은 2단계, 살구는 3단계예요.");
   const [foamPoints, setFoamPoints] = useState([]);
   const [isGuideOpen, setIsGuideOpen] = useState(true);
   const [isRubbing, setIsRubbing] = useState(false);
@@ -180,7 +180,7 @@ function GamePage() {
       const activeIds = new Set(prev.filter((spot) => !spot.fading && !spot.resolved).map((spot) => spot.id));
       const candidate = shuffle(SPOT_BLUEPRINTS).find((blueprint) => !activeIds.has(blueprint.id));
       if (!candidate) return prev;
-      setStatusMessage("새 세안 포인트가 생겼어요. 색에 맞는 단계로 처리해 주세요.");
+      setStatusMessage("새 포인트가 생겼어요.");
       return [...prev, buildSpotFromBlueprint(candidate)];
     });
   };
@@ -296,7 +296,7 @@ function GamePage() {
           actionLog: [...spot.actionLog, "stage1"],
         };
 
-        setStatusMessage(resolved ? "분홍 포인트 정리 완료." : "좋아요. 한 번 더 문질러 주세요.");
+        setStatusMessage(resolved ? "분홍 포인트 정리 완료" : "한 번 더 문질러 주세요");
 
         if (resolved) triggerFadeOut(spot.id);
         return nextSpot;
@@ -329,11 +329,11 @@ function GamePage() {
 
         if (spot.currentStage === "stage2") {
           if (selectedTool !== "stage2") {
-            setStatusMessage("하늘 포인트는 2단계 터치예요.");
+            setStatusMessage("하늘은 2단계예요");
             return { ...spot, wrongCount: spot.wrongCount + 1 };
           }
 
-          setStatusMessage("좋아요. 이제 살구로 마무리해 주세요.");
+          setStatusMessage("좋아요. 이제 살구로 마무리");
           return {
             ...spot,
             currentStage: "stage3",
@@ -343,12 +343,12 @@ function GamePage() {
 
         if (spot.currentStage === "stage3") {
           if (selectedTool !== "stage3") {
-            setStatusMessage("살구 포인트는 3단계 터치예요.");
+            setStatusMessage("살구는 3단계예요");
             return { ...spot, wrongCount: spot.wrongCount + 1 };
           }
 
           triggerFadeOut(spot.id);
-          setStatusMessage("살구 포인트까지 마무리했어요.");
+          setStatusMessage("살구까지 마무리했어요");
           return {
             ...spot,
             resolved: true,
@@ -356,7 +356,7 @@ function GamePage() {
           };
         }
 
-        setStatusMessage("분홍 포인트는 문질러 주세요.");
+        setStatusMessage("분홍은 문질러 주세요");
         return { ...spot, wrongCount: spot.wrongCount + 1 };
       })
     );
@@ -456,7 +456,7 @@ function GamePage() {
           ))}
         </div>
 
-        <div style={styles.statusBox}>{statusMessage}</div>
+        <div style={styles.smallStatus}>{statusMessage}</div>
 
         <div style={styles.toolGrid}>
           {Object.entries(TOOL_META).map(([toolKey, meta]) => {
@@ -490,19 +490,19 @@ const styles = {
   wrapper: {
     minHeight: "100svh",
     background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%)",
-    padding: "8px",
+    padding: "6px",
     boxSizing: "border-box",
   },
   card: {
-    width: "min(460px, calc(100vw - 16px))",
+    width: "min(430px, calc(100vw - 12px))",
     margin: "0 auto",
     background: "rgba(255,255,255,0.96)",
-    borderRadius: "24px",
-    padding: "12px",
-    boxShadow: "0 16px 36px rgba(15,23,42,0.1)",
+    borderRadius: "22px",
+    padding: "10px",
+    boxShadow: "0 12px 28px rgba(15,23,42,0.08)",
     border: "1px solid rgba(219,228,240,0.9)",
     display: "grid",
-    gap: "10px",
+    gap: "8px",
     position: "relative",
   },
   topBar: {
@@ -511,50 +511,50 @@ const styles = {
     alignItems: "center",
   },
   backButton: {
-    width: "48px",
-    height: "48px",
-    borderRadius: "16px",
+    width: "44px",
+    height: "44px",
+    borderRadius: "14px",
     border: "1px solid #dbe4f0",
     background: "#ffffff",
     color: "#0f172a",
-    fontSize: "22px",
+    fontSize: "20px",
     fontWeight: 900,
   },
   topInfo: {
     color: "#334155",
     fontWeight: 900,
-    fontSize: "16px",
+    fontSize: "15px",
   },
   headerRow: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) auto",
-    gap: "10px",
+    gap: "8px",
     alignItems: "start",
   },
   title: {
     margin: 0,
     color: "#0f172a",
-    fontSize: "clamp(22px, 8vw, 40px)",
-    lineHeight: 1,
+    fontSize: "clamp(20px, 7vw, 34px)",
+    lineHeight: 0.96,
     letterSpacing: "-0.05em",
     fontWeight: 900,
     wordBreak: "keep-all",
   },
   timerBox: {
-    minWidth: "104px",
-    borderRadius: "22px",
+    minWidth: "96px",
+    borderRadius: "20px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-    padding: "10px 12px",
+    padding: "8px 10px",
     textAlign: "center",
   },
   timerLabel: {
     fontSize: "10px",
     fontWeight: 900,
     color: "#c7d2fe",
-    letterSpacing: "0.2em",
+    letterSpacing: "0.18em",
   },
   timerValue: {
-    fontSize: "40px",
+    fontSize: "36px",
     lineHeight: 1,
     fontWeight: 900,
     marginTop: "4px",
@@ -566,72 +566,72 @@ const styles = {
     gap: "6px",
   },
   tipChip: {
-    padding: "8px 6px",
+    padding: "7px 4px",
     borderRadius: "999px",
     fontWeight: 900,
-    fontSize: "12px",
+    fontSize: "11px",
     textAlign: "center",
     whiteSpace: "nowrap",
   },
   guideOverlay: {
     position: "absolute",
-    inset: "88px 12px auto 12px",
+    inset: "82px 10px auto 10px",
     zIndex: 10,
   },
   guideCard: {
     background: "rgba(255,255,255,0.98)",
-    borderRadius: "22px",
-    padding: "14px",
+    borderRadius: "20px",
+    padding: "12px",
     border: "1px solid #dbe4f0",
-    boxShadow: "0 16px 32px rgba(15,23,42,0.18)",
+    boxShadow: "0 12px 28px rgba(15,23,42,0.16)",
     display: "grid",
-    gap: "10px",
+    gap: "8px",
   },
   guideTitle: {
     color: "#0f172a",
-    fontSize: "18px",
+    fontSize: "17px",
     fontWeight: 900,
     textAlign: "center",
   },
   guideLine: {
-    minHeight: "42px",
-    borderRadius: "14px",
+    minHeight: "38px",
+    borderRadius: "12px",
     border: "1px solid #dbe4f0",
     display: "flex",
     alignItems: "center",
     gap: "8px",
     justifyContent: "center",
-    padding: "0 10px",
+    padding: "0 8px",
     color: "#334155",
     fontWeight: 900,
-    fontSize: "15px",
+    fontSize: "14px",
     background: "#ffffff",
     textAlign: "center",
     whiteSpace: "nowrap",
   },
   guideDot: {
-    width: "12px",
-    height: "12px",
+    width: "11px",
+    height: "11px",
     borderRadius: "999px",
     flexShrink: 0,
     boxShadow: "0 0 0 2px rgba(255,255,255,0.9)",
   },
   guideButton: {
     width: "100%",
-    minHeight: "52px",
+    minHeight: "46px",
     border: "none",
-    borderRadius: "18px",
+    borderRadius: "16px",
     background: "linear-gradient(90deg, #24348f 0%, #4760ea 100%)",
     color: "#ffffff",
-    fontSize: "17px",
+    fontSize: "16px",
     fontWeight: 900,
   },
   faceFrame: {
     position: "relative",
-    borderRadius: "24px",
+    borderRadius: "22px",
     overflow: "hidden",
     background: "#d2d7de",
-    aspectRatio: "1 / 0.96",
+    aspectRatio: "1 / 0.84",
     touchAction: "none",
     userSelect: "none",
   },
@@ -653,55 +653,56 @@ const styles = {
   },
   foam: {
     position: "absolute",
-    width: "16px",
-    height: "16px",
+    width: "15px",
+    height: "15px",
     borderRadius: "999px",
     transform: "translate(-50%, -50%)",
     background: "rgba(255,255,255,0.9)",
     boxShadow: "0 0 0 2px rgba(255,255,255,0.5), 0 6px 12px rgba(255,255,255,0.45)",
     pointerEvents: "none",
   },
-  statusBox: {
-    borderRadius: "18px",
-    background: "#0f172a",
-    color: "#ffffff",
-    padding: "14px 14px",
-    fontSize: "15px",
-    lineHeight: 1.4,
+  smallStatus: {
+    color: "#334155",
+    fontSize: "13px",
     fontWeight: 800,
+    minHeight: "18px",
+    padding: "0 2px",
+    textAlign: "center",
     wordBreak: "keep-all",
-    minHeight: "68px",
-    display: "flex",
-    alignItems: "center",
   },
   toolGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: "8px",
+    position: "sticky",
+    bottom: "6px",
+    background: "rgba(255,255,255,0.9)",
+    backdropFilter: "blur(6px)",
+    paddingTop: "2px",
   },
   toolButton: {
-    minHeight: "118px",
-    borderRadius: "20px",
+    minHeight: "96px",
+    borderRadius: "18px",
     border: "2px solid transparent",
-    padding: "10px 8px",
+    padding: "8px 6px",
     display: "grid",
     alignContent: "center",
-    gap: "4px",
+    gap: "3px",
   },
   toolLabel: {
-    fontSize: "14px",
+    fontSize: "13px",
     fontWeight: 900,
     textAlign: "center",
   },
   toolTitle: {
-    fontSize: "14px",
-    lineHeight: 1.15,
+    fontSize: "13px",
+    lineHeight: 1.1,
     fontWeight: 900,
     textAlign: "center",
     wordBreak: "keep-all",
   },
   toolSub: {
-    fontSize: "12px",
+    fontSize: "11px",
     fontWeight: 800,
     textAlign: "center",
   },
