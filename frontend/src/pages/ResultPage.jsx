@@ -13,25 +13,31 @@ const RAW_BASE_CANDIDATES = [
   .map((v) => (typeof v === "string" ? v.trim().replace(/\/$/, "") : ""))
   .filter((v, i, arr) => v || i === arr.lastIndexOf(v));
 
-const STORED_RESULT = (() => {
+function getStoredResult() {
   try {
     const raw = localStorage.getItem("lastGameResult");
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
-})();
+}
 
-const FALLBACK_RESULT = STORED_RESULT || {
-  nickname: localStorage.getItem("nickname") || "PLAYER",
-  score: 0,
-  grade: "결과 없음",
-  resultType: "결과 없음",
-  resultMessage: "결과 데이터가 없습니다.",
-  scenarioSummary: "",
-  ctaText: "와디즈 보러가기",
-  currentAttemptAt: new Date().toISOString(),
-};
+function getFallbackResult() {
+  const stored = getStoredResult();
+
+  return (
+    stored || {
+      nickname: localStorage.getItem("nickname") || "PLAYER",
+      score: 0,
+      grade: "결과 없음",
+      resultType: "결과 없음",
+      resultMessage: "결과 데이터가 없습니다.",
+      scenarioSummary: "",
+      ctaText: "와디즈 보러가기",
+      currentAttemptAt: new Date().toISOString(),
+    }
+  );
+}
 
 function compareRank(a, b) {
   const scoreGap = Number(b.score || 0) - Number(a.score || 0);
@@ -75,7 +81,11 @@ async function requestWithFallback(method, path, config = {}) {
 function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const result = location.state || FALLBACK_RESULT;
+
+  const result = useMemo(() => {
+    const stateResult = location.state;
+    return stateResult || getFallbackResult();
+  }, [location.state]);
 
   const [rankings, setRankings] = useState([]);
   const [footerMessage, setFooterMessage] = useState("결과를 저장하는 중이에요.");
@@ -208,7 +218,7 @@ function ResultPage() {
               <div style={styles.emptyText}>아직 저장된 랭킹이 없어요.</div>
             ) : (
               rankings.map((item, index) => (
-                <div key={`${item.nickname}-${index}`} style={styles.rankRow}>
+                <div key={`${item.nickname}-${item.score}-${index}`} style={styles.rankRow}>
                   <div style={styles.rankNumber}>{index + 1}</div>
                   <div style={styles.rankNicknameWrap}>
                     <div style={styles.rankNickname}>{item.nickname}</div>

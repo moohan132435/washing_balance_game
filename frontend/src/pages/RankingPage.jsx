@@ -11,21 +11,27 @@ const RAW_BASE_CANDIDATES = [
   .map((v) => (typeof v === "string" ? v.trim().replace(/\/$/, "") : ""))
   .filter((v, i, arr) => v || i === arr.lastIndexOf(v));
 
-const STORED_RESULT = (() => {
+function getStoredResult() {
   try {
     const raw = localStorage.getItem("lastGameResult");
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
-})();
+}
 
-const FALLBACK_RESULT = STORED_RESULT || {
-  nickname: localStorage.getItem("nickname") || "PLAYER",
-  score: 0,
-  grade: "결과 없음",
-  resultType: "결과 없음",
-};
+function getFallbackResult() {
+  const stored = getStoredResult();
+
+  return (
+    stored || {
+      nickname: localStorage.getItem("nickname") || "PLAYER",
+      score: 0,
+      grade: "결과 없음",
+      resultType: "결과 없음",
+    }
+  );
+}
 
 function compareRank(a, b) {
   const scoreGap = Number(b.score || 0) - Number(a.score || 0);
@@ -73,16 +79,17 @@ function RankingPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const myResult = useMemo(() => {
-    const nickname = String(FALLBACK_RESULT.nickname || localStorage.getItem("nickname") || "PLAYER")
+    const latest = getFallbackResult();
+    const nickname = String(latest.nickname || localStorage.getItem("nickname") || "PLAYER")
       .trim()
       .slice(0, 30);
 
     return {
       nickname,
-      score: Number(FALLBACK_RESULT.score || 0),
-      grade: FALLBACK_RESULT.grade || FALLBACK_RESULT.resultType || "결과 없음",
+      score: Number(latest.score || 0),
+      grade: latest.grade || latest.resultType || "결과 없음",
     };
-  }, []);
+  }, [rankings.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -200,8 +207,19 @@ function RankingPage() {
         </div>
 
         <div style={styles.buttonGroup}>
-          <button type="button" style={styles.button} onClick={() => navigate("/")}>처음으로</button>
-          <button type="button" style={styles.button} onClick={() => navigate("/result")}>결과보기</button>
+          <button type="button" style={styles.button} onClick={() => navigate("/")}>
+            처음으로
+          </button>
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => {
+              const latest = getFallbackResult();
+              navigate("/result", { state: latest });
+            }}
+          >
+            결과보기
+          </button>
           <button
             type="button"
             style={styles.button}
