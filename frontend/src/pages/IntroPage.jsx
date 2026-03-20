@@ -72,11 +72,6 @@ function IntroPage() {
           })}
         </div>
 
-        <div style={styles.tipRow}>
-          <div style={{ ...styles.tipChip, background: "#fde7f2", color: "#b83280" }}>1단계 분홍 = 문지르기</div>
-          <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>2단계 하늘 = 터치</div>
-          <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>3단계 살구 = 터치</div>
-        </div>
 
         <input
           type="text"
@@ -166,18 +161,6 @@ const styles = {
     minHeight: "54px",
     fontWeight: 900,
     color: "#0f172a",
-  },
-  tipRow: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "8px",
-    justifyContent: "center",
-  },
-  tipChip: {
-    padding: "10px 12px",
-    borderRadius: "999px",
-    fontWeight: 900,
-    fontSize: "13px",
   },
   input: {
     width: "100%",

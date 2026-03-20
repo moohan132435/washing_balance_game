@@ -45,16 +45,16 @@ function buildSpots() {
 }
 
 function getResultType(score) {
-  if (score >= 94) return "세안 밸런스 마스터";
-  if (score >= 78) return "안정적인 케어형";
-  if (score >= 56) return "조금만 더 익숙해지면";
+  if (score >= 140) return "세안 밸런스 마스터";
+  if (score >= 95) return "안정적인 케어형";
+  if (score >= 65) return "조금만 더 익숙해지면";
   return "순서부터 익히는 중";
 }
 
 function getResultMessage(score) {
-  if (score >= 94) return "단계를 거의 놓치지 않고 깔끔하게 마무리했어요.";
-  if (score >= 78) return "큰 실수 없이 안정적으로 순서를 잘 맞췄어요.";
-  if (score >= 56) return "조금만 더 익숙해지면 점수가 확 올라가요.";
+  if (score >= 140) return "단계를 거의 놓치지 않고 아주 깔끔하게 마무리했어요.";
+  if (score >= 95) return "큰 실수 없이 안정적으로 순서를 잘 맞췄어요.";
+  if (score >= 65) return "조금만 더 익숙해지면 점수가 더 올라가요.";
   return "색과 순서를 한 번 더 보고 누르면 훨씬 좋아져요.";
 }
 
@@ -80,7 +80,7 @@ function computeScore(spots, timeLeft) {
 
   score -= wrong * 8;
   score += Math.max(0, Math.min(4, timeLeft));
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  score = Math.max(0, Math.round(score));
 
   return { score, wrong, resolved };
 }
@@ -91,8 +91,8 @@ function getSpotView(spot) {
 
   if (spot.resolved) {
     return {
-      size: 11,
-      hitSize: 26,
+      size: 10,
+      hitSize: 24,
       color: "rgba(231,162,123,0.95)",
       ring: "0 0 0 3px rgba(255,229,213,0.92)",
       border: "2px solid rgba(255,255,255,0.96)",
@@ -103,10 +103,10 @@ function getSpotView(spot) {
 
   if (spot.currentStage === "stage3") {
     return {
-      size: 12,
-      hitSize: 28,
-      color: "rgba(231,162,123,0.96)",
-      ring: "0 0 0 3px rgba(255,229,213,0.82)",
+      size: 10,
+      hitSize: 24,
+      color: "rgba(231,162,123,0.98)",
+      ring: "0 0 0 2px rgba(255,229,213,0.9)",
       border: "2px solid rgba(255,248,244,0.98)",
       opacity: 1,
       scale: 1,
@@ -115,10 +115,10 @@ function getSpotView(spot) {
 
   if (spot.currentStage === "stage2") {
     return {
-      size: 12,
-      hitSize: 28,
-      color: "rgba(130,198,245,0.96)",
-      ring: "0 0 0 3px rgba(226,243,255,0.9)",
+      size: 10,
+      hitSize: 24,
+      color: "rgba(130,198,245,0.98)",
+      ring: "0 0 0 2px rgba(226,243,255,0.94)",
       border: "2px solid rgba(255,255,255,0.98)",
       opacity: 1,
       scale: 1,
@@ -126,10 +126,10 @@ function getSpotView(spot) {
   }
 
   return {
-    size: 12,
-    hitSize: 28,
-    color: "rgba(217,122,185,0.96)",
-    ring: "0 0 0 3px rgba(253,231,242,0.92)",
+    size: 10,
+    hitSize: 24,
+    color: "rgba(217,122,185,0.98)",
+    ring: "0 0 0 2px rgba(253,231,242,0.95)",
     border: "2px solid rgba(255,255,255,0.98)",
     opacity: 1,
     scale: 1,
@@ -296,7 +296,7 @@ function GamePage() {
           actionLog: [...spot.actionLog, "stage1"],
         };
 
-        setStatusMessage(resolved ? "분홍 포인트 정리 완료." : "좋아요. 한 번 더 문질러 마무리해 주세요.");
+        setStatusMessage(resolved ? "분홍 포인트 정리 완료." : "좋아요. 한 번 더 문질러 주세요.");
 
         if (resolved) triggerFadeOut(spot.id);
         return nextSpot;
@@ -329,11 +329,11 @@ function GamePage() {
 
         if (spot.currentStage === "stage2") {
           if (selectedTool !== "stage2") {
-            setStatusMessage("하늘 포인트는 2단계 수분/보습을 먼저 눌러 주세요.");
+            setStatusMessage("하늘 포인트는 2단계 터치예요.");
             return { ...spot, wrongCount: spot.wrongCount + 1 };
           }
 
-          setStatusMessage("좋아요. 이제 살구 포인트가 됐어요. 3단계로 마무리해 주세요.");
+          setStatusMessage("좋아요. 이제 살구로 마무리해 주세요.");
           return {
             ...spot,
             currentStage: "stage3",
@@ -343,12 +343,12 @@ function GamePage() {
 
         if (spot.currentStage === "stage3") {
           if (selectedTool !== "stage3") {
-            setStatusMessage("살구 포인트는 3단계 피부장벽 강화로 마무리해 주세요.");
+            setStatusMessage("살구 포인트는 3단계 터치예요.");
             return { ...spot, wrongCount: spot.wrongCount + 1 };
           }
 
           triggerFadeOut(spot.id);
-          setStatusMessage("살구 포인트까지 깔끔하게 마무리했어요.");
+          setStatusMessage("살구 포인트까지 마무리했어요.");
           return {
             ...spot,
             resolved: true,
@@ -356,7 +356,7 @@ function GamePage() {
           };
         }
 
-        setStatusMessage("분홍 포인트는 버튼이 아니라 얼굴을 문질러서 처리해 주세요.");
+        setStatusMessage("분홍 포인트는 문질러 주세요.");
         return { ...spot, wrongCount: spot.wrongCount + 1 };
       })
     );
@@ -382,18 +382,18 @@ function GamePage() {
 
         <div style={styles.tipRow}>
           <div style={{ ...styles.tipChip, background: "#fde7f2", color: "#b83280" }}>분홍 = 문지르기</div>
-          <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>하늘 = 2단계 터치</div>
-          <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>살구 = 3단계 터치</div>
+          <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>하늘 = 2단계</div>
+          <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>살구 = 3단계</div>
         </div>
 
         {isGuideOpen && (
           <div style={styles.guideOverlay}>
             <div style={styles.guideCard}>
-              <div style={styles.guideTitle}>시작 전에 이것만 보면 돼요</div>
-              <div style={styles.guideLine}>분홍은 문지르기</div>
-              <div style={styles.guideLine}>하늘은 2단계 터치</div>
-              <div style={styles.guideLine}>살구는 3단계 터치</div>
-              <button type="button" style={styles.guideButton} onClick={() => setIsGuideOpen(false)}>바로 시작하기</button>
+              <div style={styles.guideTitle}>이것만 기억하면 돼요</div>
+              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#d97ab9" }} />분홍은 문지르기</div>
+              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#82c6f5" }} />하늘은 2단계 터치</div>
+              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#e7a27b" }} />살구는 3단계 터치</div>
+              <button type="button" style={styles.guideButton} onClick={() => setIsGuideOpen(false)}>바로 시작</button>
             </div>
           </div>
         )}
@@ -470,7 +470,7 @@ function GamePage() {
                   ...styles.toolButton,
                   background: meta.bg,
                   borderColor: active ? "#3158d8" : meta.border,
-                  boxShadow: active ? "0 0 0 4px rgba(49,88,216,0.16)" : "none",
+                  boxShadow: active ? "0 0 0 3px rgba(49,88,216,0.15)" : "none",
                   transform: active ? "translateY(-2px)" : "none",
                 }}
               >
@@ -490,19 +490,19 @@ const styles = {
   wrapper: {
     minHeight: "100svh",
     background: "linear-gradient(180deg, #eef4ff 0%, #f8fbff 100%)",
-    padding: "10px",
+    padding: "8px",
     boxSizing: "border-box",
   },
   card: {
-    width: "min(520px, calc(100vw - 20px))",
+    width: "min(460px, calc(100vw - 16px))",
     margin: "0 auto",
     background: "rgba(255,255,255,0.96)",
-    borderRadius: "30px",
-    padding: "16px",
-    boxShadow: "0 20px 48px rgba(15,23,42,0.1)",
+    borderRadius: "24px",
+    padding: "12px",
+    boxShadow: "0 16px 36px rgba(15,23,42,0.1)",
     border: "1px solid rgba(219,228,240,0.9)",
     display: "grid",
-    gap: "14px",
+    gap: "10px",
     position: "relative",
   },
   topBar: {
@@ -511,117 +511,127 @@ const styles = {
     alignItems: "center",
   },
   backButton: {
-    width: "58px",
-    height: "58px",
-    borderRadius: "20px",
+    width: "48px",
+    height: "48px",
+    borderRadius: "16px",
     border: "1px solid #dbe4f0",
     background: "#ffffff",
     color: "#0f172a",
-    fontSize: "24px",
+    fontSize: "22px",
     fontWeight: 900,
   },
   topInfo: {
     color: "#334155",
     fontWeight: 900,
-    fontSize: "18px",
+    fontSize: "16px",
   },
   headerRow: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) auto",
-    gap: "12px",
+    gap: "10px",
     alignItems: "start",
   },
   title: {
     margin: 0,
     color: "#0f172a",
-    fontSize: "clamp(34px, 10vw, 58px)",
-    lineHeight: 0.95,
-    letterSpacing: "-0.06em",
+    fontSize: "clamp(22px, 8vw, 40px)",
+    lineHeight: 1,
+    letterSpacing: "-0.05em",
     fontWeight: 900,
     wordBreak: "keep-all",
   },
   timerBox: {
-    minWidth: "118px",
-    borderRadius: "24px",
+    minWidth: "104px",
+    borderRadius: "22px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
-    padding: "12px 14px",
+    padding: "10px 12px",
     textAlign: "center",
   },
   timerLabel: {
-    fontSize: "11px",
+    fontSize: "10px",
     fontWeight: 900,
     color: "#c7d2fe",
-    letterSpacing: "0.22em",
+    letterSpacing: "0.2em",
   },
   timerValue: {
-    fontSize: "44px",
+    fontSize: "40px",
     lineHeight: 1,
     fontWeight: 900,
     marginTop: "4px",
     color: "#f8e77c",
   },
   tipRow: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "8px",
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: "6px",
   },
   tipChip: {
-    padding: "10px 14px",
+    padding: "8px 6px",
     borderRadius: "999px",
     fontWeight: 900,
-    fontSize: "13px",
+    fontSize: "12px",
+    textAlign: "center",
+    whiteSpace: "nowrap",
   },
   guideOverlay: {
     position: "absolute",
-    inset: "120px 16px auto 16px",
+    inset: "88px 12px auto 12px",
     zIndex: 10,
   },
   guideCard: {
-    background: "rgba(255,255,255,0.97)",
-    borderRadius: "28px",
-    padding: "18px",
+    background: "rgba(255,255,255,0.98)",
+    borderRadius: "22px",
+    padding: "14px",
     border: "1px solid #dbe4f0",
-    boxShadow: "0 18px 40px rgba(15,23,42,0.18)",
+    boxShadow: "0 16px 32px rgba(15,23,42,0.18)",
     display: "grid",
-    gap: "12px",
+    gap: "10px",
   },
   guideTitle: {
     color: "#0f172a",
-    fontSize: "20px",
+    fontSize: "18px",
     fontWeight: 900,
     textAlign: "center",
   },
   guideLine: {
-    minHeight: "54px",
-    borderRadius: "18px",
+    minHeight: "42px",
+    borderRadius: "14px",
     border: "1px solid #dbe4f0",
     display: "flex",
     alignItems: "center",
+    gap: "8px",
     justifyContent: "center",
-    padding: "0 12px",
+    padding: "0 10px",
     color: "#334155",
     fontWeight: 900,
-    fontSize: "18px",
+    fontSize: "15px",
     background: "#ffffff",
     textAlign: "center",
     whiteSpace: "nowrap",
   },
+  guideDot: {
+    width: "12px",
+    height: "12px",
+    borderRadius: "999px",
+    flexShrink: 0,
+    boxShadow: "0 0 0 2px rgba(255,255,255,0.9)",
+  },
   guideButton: {
     width: "100%",
-    minHeight: "62px",
+    minHeight: "52px",
     border: "none",
-    borderRadius: "22px",
+    borderRadius: "18px",
     background: "linear-gradient(90deg, #24348f 0%, #4760ea 100%)",
     color: "#ffffff",
-    fontSize: "18px",
+    fontSize: "17px",
     fontWeight: 900,
   },
   faceFrame: {
     position: "relative",
-    borderRadius: "28px",
+    borderRadius: "24px",
     overflow: "hidden",
     background: "#d2d7de",
-    aspectRatio: "1 / 1.06",
+    aspectRatio: "1 / 0.96",
     touchAction: "none",
     userSelect: "none",
   },
@@ -643,8 +653,8 @@ const styles = {
   },
   foam: {
     position: "absolute",
-    width: "18px",
-    height: "18px",
+    width: "16px",
+    height: "16px",
     borderRadius: "999px",
     transform: "translate(-50%, -50%)",
     background: "rgba(255,255,255,0.9)",
@@ -652,46 +662,46 @@ const styles = {
     pointerEvents: "none",
   },
   statusBox: {
-    borderRadius: "22px",
+    borderRadius: "18px",
     background: "#0f172a",
     color: "#ffffff",
-    padding: "18px 16px",
-    fontSize: "16px",
-    lineHeight: 1.45,
+    padding: "14px 14px",
+    fontSize: "15px",
+    lineHeight: 1.4,
     fontWeight: 800,
     wordBreak: "keep-all",
-    minHeight: "84px",
+    minHeight: "68px",
     display: "flex",
     alignItems: "center",
   },
   toolGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: "12px",
-  },
-  toolButton: {
-    minHeight: "154px",
-    borderRadius: "28px",
-    border: "3px solid transparent",
-    padding: "14px 10px",
-    display: "grid",
-    alignContent: "center",
     gap: "8px",
   },
+  toolButton: {
+    minHeight: "118px",
+    borderRadius: "20px",
+    border: "2px solid transparent",
+    padding: "10px 8px",
+    display: "grid",
+    alignContent: "center",
+    gap: "4px",
+  },
   toolLabel: {
-    fontSize: "18px",
+    fontSize: "14px",
     fontWeight: 900,
     textAlign: "center",
   },
   toolTitle: {
-    fontSize: "18px",
+    fontSize: "14px",
     lineHeight: 1.15,
     fontWeight: 900,
     textAlign: "center",
     wordBreak: "keep-all",
   },
   toolSub: {
-    fontSize: "14px",
+    fontSize: "12px",
     fontWeight: 800,
     textAlign: "center",
   },
