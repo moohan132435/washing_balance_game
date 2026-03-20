@@ -23,20 +23,16 @@ function getStoredResult() {
 }
 
 function getFallbackResult() {
-  const stored = getStoredResult();
-
-  return (
-    stored || {
-      nickname: localStorage.getItem("nickname") || "PLAYER",
-      score: 0,
-      grade: "결과 없음",
-      resultType: "결과 없음",
-      resultMessage: "결과 데이터가 없습니다.",
-      scenarioSummary: "",
-      ctaText: "와디즈 보러가기",
-      currentAttemptAt: new Date().toISOString(),
-    }
-  );
+  return {
+    nickname: localStorage.getItem("nickname") || "PLAYER",
+    score: 0,
+    grade: "결과 없음",
+    resultType: "결과 없음",
+    resultMessage: "결과 데이터가 없습니다.",
+    scenarioSummary: "",
+    ctaText: "와디즈 보러가기",
+    currentAttemptAt: new Date().toISOString(),
+  };
 }
 
 function compareRank(a, b) {
@@ -81,10 +77,12 @@ async function requestWithFallback(method, path, config = {}) {
 function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
-
   const result = useMemo(() => {
-    const stateResult = location.state;
-    return stateResult || getFallbackResult();
+    const latest = location.state || getStoredResult() || getFallbackResult();
+    return {
+      ...getFallbackResult(),
+      ...latest,
+    };
   }, [location.state]);
 
   const [rankings, setRankings] = useState([]);
@@ -218,7 +216,7 @@ function ResultPage() {
               <div style={styles.emptyText}>아직 저장된 랭킹이 없어요.</div>
             ) : (
               rankings.map((item, index) => (
-                <div key={`${item.nickname}-${item.score}-${index}`} style={styles.rankRow}>
+                <div key={`${item.nickname}-${index}`} style={styles.rankRow}>
                   <div style={styles.rankNumber}>{index + 1}</div>
                   <div style={styles.rankNicknameWrap}>
                     <div style={styles.rankNickname}>{item.nickname}</div>
@@ -251,7 +249,7 @@ function ResultPage() {
           </button>
 
           <div style={styles.secondaryGrid}>
-            <button type="button" style={styles.secondaryButton} onClick={() => navigate("/ranking")}>
+            <button type="button" style={styles.secondaryButton} onClick={() => navigate("/ranking", { state: result })}>
               전체 랭킹 보기
             </button>
             <button

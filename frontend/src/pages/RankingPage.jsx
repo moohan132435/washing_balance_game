@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const RAW_BASE_CANDIDATES = [
   import.meta.env.VITE_API_BASE_URL,
@@ -21,16 +21,12 @@ function getStoredResult() {
 }
 
 function getFallbackResult() {
-  const stored = getStoredResult();
-
-  return (
-    stored || {
-      nickname: localStorage.getItem("nickname") || "PLAYER",
-      score: 0,
-      grade: "결과 없음",
-      resultType: "결과 없음",
-    }
-  );
+  return {
+    nickname: localStorage.getItem("nickname") || "PLAYER",
+    score: 0,
+    grade: "결과 없음",
+    resultType: "결과 없음",
+  };
 }
 
 function compareRank(a, b) {
@@ -73,23 +69,26 @@ async function requestWithFallback(method, path, config = {}) {
 }
 
 function RankingPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const [rankings, setRankings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
   const myResult = useMemo(() => {
-    const latest = getFallbackResult();
+    const latest = location.state || getStoredResult() || getFallbackResult();
     const nickname = String(latest.nickname || localStorage.getItem("nickname") || "PLAYER")
       .trim()
       .slice(0, 30);
 
     return {
+      ...getFallbackResult(),
+      ...latest,
       nickname,
       score: Number(latest.score || 0),
       grade: latest.grade || latest.resultType || "결과 없음",
     };
-  }, [rankings.length]);
+  }, [location.state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,25 +134,14 @@ function RankingPage() {
         Number(item.score || 0) === myResult.score
     );
 
-    if (exactIndex >= 0) {
-      return {
-        rank: exactIndex + 1,
-        item: rankings[exactIndex],
-      };
+    if (exactIndex < 0) {
+      return null;
     }
 
-    const nicknameIndex = rankings.findIndex(
-      (item) => String(item.nickname || "").trim() === myResult.nickname
-    );
-
-    if (nicknameIndex >= 0) {
-      return {
-        rank: nicknameIndex + 1,
-        item: rankings[nicknameIndex],
-      };
-    }
-
-    return null;
+    return {
+      rank: exactIndex + 1,
+      item: rankings[exactIndex],
+    };
   }, [rankings, myResult]);
 
   return (
@@ -207,19 +195,8 @@ function RankingPage() {
         </div>
 
         <div style={styles.buttonGroup}>
-          <button type="button" style={styles.button} onClick={() => navigate("/")}>
-            처음으로
-          </button>
-          <button
-            type="button"
-            style={styles.button}
-            onClick={() => {
-              const latest = getFallbackResult();
-              navigate("/result", { state: latest });
-            }}
-          >
-            결과보기
-          </button>
+          <button type="button" style={styles.button} onClick={() => navigate("/")}>처음으로</button>
+          <button type="button" style={styles.button} onClick={() => navigate("/result", { state: myResult })}>결과보기</button>
           <button
             type="button"
             style={styles.button}
