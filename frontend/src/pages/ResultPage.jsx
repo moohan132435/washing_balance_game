@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const WADIZ_URL = import.meta.env.VITE_WADIZ_URL || "https://www.wadiz.kr";
+const INSTAGRAM_DM_URL = import.meta.env.VITE_INSTAGRAM_DM_URL || "https://ig.me/m/pgb_kr";
 const RAW_BASE_CANDIDATES = [
   import.meta.env.VITE_API_BASE_URL,
   import.meta.env.VITE_BACKEND_URL,
@@ -16,7 +17,7 @@ const STORED_RESULT = (() => {
   try {
     const raw = localStorage.getItem("lastGameResult");
     return raw ? JSON.parse(raw) : null;
-  } catch (error) {
+  } catch {
     return null;
   }
 })();
@@ -79,11 +80,14 @@ function ResultPage() {
   const [rankings, setRankings] = useState([]);
   const [footerMessage, setFooterMessage] = useState("결과를 저장하는 중이에요.");
   const [isSaving, setIsSaving] = useState(true);
+  const [showEventPopup, setShowEventPopup] = useState(false);
   const didRunRef = useRef(false);
 
   const payload = useMemo(
     () => ({
-      nickname: String(result.nickname || localStorage.getItem("nickname") || "PLAYER").trim().slice(0, 30),
+      nickname: String(result.nickname || localStorage.getItem("nickname") || "PLAYER")
+        .trim()
+        .slice(0, 30),
       score: Number(result.score || 0),
       grade: result.grade || result.resultType || "결과 없음",
       resultType: result.resultType || result.grade || "결과 없음",
@@ -129,7 +133,16 @@ function ResultPage() {
         const rankingResponse = await requestWithFallback("get", "/api/rankings?limit=5");
         if (cancelled) return;
         const list = Array.isArray(rankingResponse?.data) ? rankingResponse.data : [];
-        setRankings([...list].sort(compareRank).slice(0, 5));
+        const sortedTop5 = [...list].sort(compareRank).slice(0, 5);
+        setRankings(sortedTop5);
+
+        const isTop5 = sortedTop5.some(
+          (item) => String(item.nickname || "").trim() === payload.nickname && Number(item.score || 0) === payload.score
+        );
+
+        if (isTop5) {
+          setShowEventPopup(true);
+        }
       } catch (error) {
         if (cancelled) return;
         console.error("ranking fetch failed", error);
@@ -152,6 +165,24 @@ function ResultPage() {
 
   return (
     <div style={styles.wrapper}>
+      {showEventPopup && (
+        <div style={styles.popupOverlay}>
+          <div style={styles.popupCard}>
+            <button type="button" style={styles.popupCloseButton} onClick={() => setShowEventPopup(false)}>
+              X
+            </button>
+            <div style={styles.popupBadge}>스타벅스 이벤트!</div>
+            <div style={styles.popupTitle}>TOP 5라면 지금 바로 참여해보세요</div>
+            <div style={styles.popupSteps}>
+              <div style={styles.popupStep}>1. 게임 결과 캡쳐</div>
+              <div style={styles.popupStep}>2. 와디즈 알림신청 캡쳐</div>
+              <div style={styles.popupStep}>3. 두 장을 PGB_KR로 DM 보내기</div>
+            </div>
+            <div style={styles.popupHint}>확인 후 스타벅스 이벤트 참여 대상으로 안내드려요.</div>
+          </div>
+        </div>
+      )}
+
       <div style={styles.card}>
         <div style={styles.headerRow}>
           <div style={styles.titleWrap}>
@@ -201,8 +232,18 @@ function ResultPage() {
             {result.ctaText || "와디즈 보러가기"}
           </button>
 
+          <button
+            type="button"
+            style={styles.eventButton}
+            onClick={() => window.open(INSTAGRAM_DM_URL, "_blank", "noopener,noreferrer")}
+          >
+            스타벅스 이벤트 참여
+          </button>
+
           <div style={styles.secondaryGrid}>
-            <button type="button" style={styles.secondaryButton} onClick={() => navigate("/ranking")}>전체 랭킹 보기</button>
+            <button type="button" style={styles.secondaryButton} onClick={() => navigate("/ranking")}>
+              전체 랭킹 보기
+            </button>
             <button
               type="button"
               style={styles.secondaryButton}
@@ -239,6 +280,85 @@ const styles = {
     border: "1px solid rgba(219,228,240,0.9)",
     display: "grid",
     gap: "14px",
+    position: "relative",
+  },
+  popupOverlay: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.52)",
+    display: "grid",
+    placeItems: "center",
+    zIndex: 30,
+    padding: "18px",
+    boxSizing: "border-box",
+  },
+  popupCard: {
+    width: "min(420px, calc(100vw - 36px))",
+    background: "#ffffff",
+    borderRadius: "28px",
+    padding: "22px 18px 20px",
+    boxShadow: "0 24px 56px rgba(15,23,42,0.24)",
+    border: "1px solid rgba(219,228,240,0.95)",
+    display: "grid",
+    gap: "12px",
+    position: "relative",
+  },
+  popupCloseButton: {
+    position: "absolute",
+    top: "14px",
+    right: "14px",
+    width: "38px",
+    height: "38px",
+    borderRadius: "50%",
+    border: "1px solid #d6deeb",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: "16px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  popupBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "fit-content",
+    padding: "8px 14px",
+    borderRadius: "999px",
+    background: "#111827",
+    color: "#ffffff",
+    fontSize: "14px",
+    fontWeight: 900,
+    letterSpacing: "-0.01em",
+  },
+  popupTitle: {
+    marginTop: "4px",
+    color: "#0f172a",
+    fontSize: "26px",
+    lineHeight: 1.2,
+    fontWeight: 900,
+    wordBreak: "keep-all",
+    paddingRight: "42px",
+  },
+  popupSteps: {
+    display: "grid",
+    gap: "10px",
+  },
+  popupStep: {
+    borderRadius: "18px",
+    background: "#f8fafc",
+    border: "1px solid #dbe4f0",
+    padding: "14px 14px",
+    color: "#0f172a",
+    fontSize: "16px",
+    fontWeight: 800,
+    lineHeight: 1.45,
+    wordBreak: "keep-all",
+  },
+  popupHint: {
+    color: "#64748b",
+    fontSize: "14px",
+    lineHeight: 1.5,
+    fontWeight: 700,
   },
   headerRow: {
     display: "grid",
@@ -384,6 +504,17 @@ const styles = {
     border: "none",
     borderRadius: "22px",
     background: "linear-gradient(90deg, #0f1c59 0%, #3b54e6 100%)",
+    color: "#ffffff",
+    padding: "18px 18px",
+    fontSize: "18px",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  eventButton: {
+    width: "100%",
+    border: "none",
+    borderRadius: "22px",
+    background: "linear-gradient(90deg, #111827 0%, #000000 100%)",
     color: "#ffffff",
     padding: "18px 18px",
     fontSize: "18px",
