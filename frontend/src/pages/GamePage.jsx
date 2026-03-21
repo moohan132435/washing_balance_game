@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const TOTAL_TIME = 10;
+
 const FACE_SRC = {
   male: "/faces/male_face_game.png",
   female: "/faces/female_face_game.png",
@@ -238,7 +239,7 @@ function GamePage() {
   const [isGuideOpen, setIsGuideOpen] = useState(true);
   const [isRubbing, setIsRubbing] = useState(false);
 
-  const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved).length, [spots]);
+  const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved && !spot.fading).length, [spots]);
   const faceSrc = FACE_SRC[faceKey] || FACE_SRC.female;
 
   const triggerFadeOut = (spotId) => {
@@ -247,6 +248,10 @@ function GamePage() {
         prev.map((spot) => (spot.id === spotId ? { ...spot, fading: true } : spot))
       );
     }, 40);
+
+    window.setTimeout(() => {
+      setSpots((prev) => prev.filter((spot) => spot.id !== spotId));
+    }, 220);
   };
 
   const spawnSpot = () => {
@@ -293,8 +298,9 @@ function GamePage() {
   useEffect(() => {
     if (finishedRef.current || isGuideOpen) return;
 
-    if (timeLeft === 0 || unresolvedCount === 0) {
+    if (timeLeft === 0) {
       finishedRef.current = true;
+
       const { score, wrong, resolved } = computeScore(spots, timeLeft);
       const resultType = getResultType(score);
       const payload = {
@@ -314,7 +320,7 @@ function GamePage() {
         state: payload,
       });
     }
-  }, [isGuideOpen, navigate, nickname, spots, timeLeft, unresolvedCount]);
+  }, [isGuideOpen, navigate, nickname, spots, timeLeft]);
 
   useEffect(() => {
     if (!foamPoints.length) return undefined;
@@ -347,6 +353,18 @@ function GamePage() {
     };
   }, [isGuideOpen]);
 
+useEffect(() => {
+  if (finishedRef.current || isGuideOpen || timeLeft <= 0) return;
+  if (unresolvedCount !== 0) return;
+
+  const timer = window.setTimeout(() => {
+    if (finishedRef.current || timeLeftRef.current <= 0) return;
+    spawnSpot();
+  }, 0);
+
+  return () => window.clearTimeout(timer);
+}, [unresolvedCount, isGuideOpen, timeLeft]);
+
   const applyStage1 = (position) => {
     if (!position) return;
 
@@ -367,7 +385,7 @@ function GamePage() {
 
     setSpots((prev) =>
       prev.map((spot) => {
-        if (spot.resolved || spot.currentStage !== "stage1") return spot;
+        if (spot.resolved || spot.fading || spot.currentStage !== "stage1") return spot;
 
         const distance = Math.hypot(position.x - spot.x, position.y - spot.y);
         const lastRubAt = lastRubAtRef.current.get(spot.id) || 0;
@@ -410,7 +428,7 @@ function GamePage() {
       prev.map((spot) => {
         if (spot.id !== spotId) return spot;
 
-        if (spot.resolved) {
+        if (spot.resolved || spot.fading) {
           setStatusMessage("살구는 1번만 누르면 끝이에요");
           return { ...spot, wrongCount: spot.wrongCount + 1 };
         }
