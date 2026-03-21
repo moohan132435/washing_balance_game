@@ -21,12 +21,6 @@ const SPOT_BLUEPRINTS = [
 
 const STAGE_KEYS = ["stage1", "stage2", "stage3"];
 
-const TOOL_META = {
-  stage1: { label: "1단계", title: "딥클렌징", sub: "문지르기", bg: "#d97ab9", border: "#bb4f97", text: "#ffffff" },
-  stage2: { label: "2단계", title: "수분/보습", sub: "터치", bg: "#82c6f5", border: "#5eaee3", text: "#ffffff" },
-  stage3: { label: "3단계", title: "피부장벽 강화", sub: "터치", bg: "#e7a27b", border: "#d88457", text: "#ffffff" },
-};
-
 const RAW_BASE_CANDIDATES = [
   import.meta.env.VITE_API_BASE_URL,
   import.meta.env.VITE_BACKEND_URL,
@@ -125,7 +119,7 @@ function getResultMessage(score) {
   if (score >= 140) return "단계를 거의 놓치지 않고 아주 깔끔하게 마무리했어요.";
   if (score >= 95) return "큰 실수 없이 안정적으로 순서를 잘 맞췄어요.";
   if (score >= 65) return "조금만 더 익숙해지면 점수가 더 올라가요.";
-  return "색과 순서를 한 번 더 보고 누르면 훨씬 좋아져요.";
+  return "색과 순서를 한 번 더 보면 점수가 더 올라가요.";
 }
 
 function computeScore(spots, timeLeft) {
@@ -171,7 +165,7 @@ function getSpotView(spot) {
   if (spot.resolved) {
     return {
       size: 10,
-      hitSize: 24,
+      hitSize: 26,
       color: "rgba(231,162,123,0.95)",
       ring: "0 0 0 3px rgba(255,229,213,0.92)",
       border: "2px solid rgba(255,255,255,0.96)",
@@ -183,7 +177,7 @@ function getSpotView(spot) {
   if (spot.currentStage === "stage3") {
     return {
       size: 10,
-      hitSize: 24,
+      hitSize: 26,
       color: "rgba(231,162,123,0.98)",
       ring: "0 0 0 2px rgba(255,229,213,0.9)",
       border: "2px solid rgba(255,248,244,0.98)",
@@ -195,7 +189,7 @@ function getSpotView(spot) {
   if (spot.currentStage === "stage2") {
     return {
       size: 10,
-      hitSize: 24,
+      hitSize: 26,
       color: "rgba(130,198,245,0.98)",
       ring: "0 0 0 2px rgba(226,243,255,0.94)",
       border: "2px solid rgba(255,255,255,0.98)",
@@ -206,7 +200,7 @@ function getSpotView(spot) {
 
   return {
     size: 10,
-    hitSize: 24,
+    hitSize: 26,
     color: "rgba(217,122,185,0.98)",
     ring: "0 0 0 2px rgba(253,231,242,0.95)",
     border: "2px solid rgba(255,255,255,0.98)",
@@ -238,9 +232,8 @@ function GamePage() {
     selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female"
   );
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
-  const [selectedTool, setSelectedTool] = useState("stage1");
   const [spots, setSpots] = useState(() => buildSpots());
-  const [statusMessage, setStatusMessage] = useState("분홍은 문지르기, 하늘은 2단계, 살구는 3단계예요.");
+  const [statusMessage, setStatusMessage] = useState("분홍은 문지르기, 하늘/살구는 클릭으로 처리하세요.");
   const [foamPoints, setFoamPoints] = useState([]);
   const [isGuideOpen, setIsGuideOpen] = useState(true);
   const [isRubbing, setIsRubbing] = useState(false);
@@ -250,7 +243,9 @@ function GamePage() {
 
   const triggerFadeOut = (spotId) => {
     window.setTimeout(() => {
-      setSpots((prev) => prev.map((spot) => (spot.id === spotId ? { ...spot, fading: true } : spot)));
+      setSpots((prev) =>
+        prev.map((spot) => (spot.id === spotId ? { ...spot, fading: true } : spot))
+      );
     }, 40);
   };
 
@@ -259,6 +254,7 @@ function GamePage() {
       const activeIds = new Set(prev.filter((spot) => !spot.fading && !spot.resolved).map((spot) => spot.id));
       const candidate = shuffle(SPOT_BLUEPRINTS).find((blueprint) => !activeIds.has(blueprint.id));
       if (!candidate) return prev;
+
       setStatusMessage("새 포인트가 생겼어요.");
       return [...prev, buildSpotFromBlueprint(candidate)];
     });
@@ -379,30 +375,27 @@ function GamePage() {
         if (distance > 6 || Date.now() - lastRubAt < 120) return spot;
         lastRubAtRef.current.set(spot.id, Date.now());
 
-        const nextSpot = {
+        setStatusMessage("분홍 포인트 정리 완료");
+        triggerFadeOut(spot.id);
+
+        return {
           ...spot,
           washCount: 1,
           resolved: true,
           actionLog: [...spot.actionLog, "stage1"],
         };
-
-        setStatusMessage("분홍 포인트 정리 완료");
-        triggerFadeOut(spot.id);
-        return nextSpot;
       })
     );
   };
 
   const handleFacePointerDown = (event) => {
     if (isGuideOpen) return;
-    if (selectedTool !== "stage1") return;
     setIsRubbing(true);
     applyStage1(getPointerPosition(event, faceStageRef.current));
   };
 
   const handleFacePointerMove = (event) => {
-    if (isGuideOpen) return;
-    if (!isRubbing || selectedTool !== "stage1") return;
+    if (isGuideOpen || !isRubbing) return;
     applyStage1(getPointerPosition(event, faceStageRef.current));
   };
 
@@ -412,17 +405,23 @@ function GamePage() {
 
   const handleSpotPress = (spotId) => {
     if (isGuideOpen) return;
+
     setSpots((prev) =>
       prev.map((spot) => {
-        if (spot.id !== spotId || spot.resolved) return spot;
+        if (spot.id !== spotId) return spot;
+
+        if (spot.resolved) {
+          setStatusMessage("살구는 1번만 누르면 끝이에요");
+          return { ...spot, wrongCount: spot.wrongCount + 1 };
+        }
+
+        if (spot.currentStage === "stage1") {
+          setStatusMessage("분홍은 클릭 말고 문질러 주세요");
+          return { ...spot, wrongCount: spot.wrongCount + 1 };
+        }
 
         if (spot.currentStage === "stage2") {
-          if (selectedTool !== "stage2") {
-            setStatusMessage("하늘은 2단계예요");
-            return { ...spot, wrongCount: spot.wrongCount + 1 };
-          }
-
-          setStatusMessage("좋아요. 이제 살구로 마무리");
+          setStatusMessage("좋아요. 이제 살구를 1번만 누르세요");
           return {
             ...spot,
             currentStage: "stage3",
@@ -431,11 +430,6 @@ function GamePage() {
         }
 
         if (spot.currentStage === "stage3") {
-          if (selectedTool !== "stage3") {
-            setStatusMessage("살구는 1번만 정확하게 눌러야 해요");
-            return { ...spot, wrongCount: spot.wrongCount + 1 };
-          }
-
           triggerFadeOut(spot.id);
           setStatusMessage("살구까지 마무리했어요");
           return {
@@ -445,8 +439,7 @@ function GamePage() {
           };
         }
 
-        setStatusMessage("분홍은 문질러 주세요");
-        return { ...spot, wrongCount: spot.wrongCount + 1 };
+        return spot;
       })
     );
   };
@@ -455,7 +448,9 @@ function GamePage() {
     <div style={styles.wrapper}>
       <div style={styles.card}>
         <div style={styles.topBar}>
-          <button type="button" style={styles.backButton} onClick={() => navigate("/")}>✕</button>
+          <button type="button" style={styles.backButton} onClick={() => navigate("/")}>
+            ✕
+          </button>
           <div style={styles.topInfo}>남은 포인트 {unresolvedCount}개</div>
         </div>
 
@@ -471,18 +466,29 @@ function GamePage() {
 
         <div style={styles.tipRow}>
           <div style={{ ...styles.tipChip, background: "#fde7f2", color: "#b83280" }}>분홍 = 문지르기</div>
-          <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>하늘 = 2단계</div>
-          <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>살구 = 3단계</div>
+          <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>하늘 = 클릭</div>
+          <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>살구 = 클릭</div>
         </div>
 
         {isGuideOpen && (
           <div style={styles.guideOverlay}>
             <div style={styles.guideCard}>
               <div style={styles.guideTitle}>이것만 기억하면 돼요</div>
-              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#d97ab9" }} />분홍은 문지르면 바로 제거</div>
-              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#82c6f5" }} />하늘은 2단계 터치 후 살구로 변경</div>
-              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#e7a27b" }} />살구는 1번 정확히 터치하면 제거</div>
-              <button type="button" style={styles.guideButton} onClick={() => setIsGuideOpen(false)}>바로 시작</button>
+              <div style={styles.guideLine}>
+                <span style={{ ...styles.guideDot, background: "#d97ab9" }} />
+                분홍은 문지르면 바로 제거
+              </div>
+              <div style={styles.guideLine}>
+                <span style={{ ...styles.guideDot, background: "#82c6f5" }} />
+                하늘은 클릭하면 살구로 변경
+              </div>
+              <div style={styles.guideLine}>
+                <span style={{ ...styles.guideDot, background: "#e7a27b" }} />
+                살구는 1번만 클릭하면 제거
+              </div>
+              <button type="button" style={styles.guideButton} onClick={() => setIsGuideOpen(false)}>
+                바로 시작
+              </button>
             </div>
           </div>
         )}
@@ -502,6 +508,7 @@ function GamePage() {
 
           {spots.map((spot) => {
             const view = getSpotView(spot);
+
             return (
               <button
                 key={spot.id}
@@ -516,7 +523,6 @@ function GamePage() {
                   opacity: view.opacity,
                   transform: `translate(-50%, -50%) scale(${view.scale})`,
                   boxShadow: view.ring,
-                  pointerEvents: spot.fading ? "none" : "auto",
                 }}
               >
                 <span
@@ -546,30 +552,6 @@ function GamePage() {
         </div>
 
         <div style={styles.smallStatus}>{statusMessage}</div>
-
-        <div style={styles.toolGrid}>
-          {Object.entries(TOOL_META).map(([toolKey, meta]) => {
-            const active = selectedTool === toolKey;
-            return (
-              <button
-                key={toolKey}
-                type="button"
-                onClick={() => setSelectedTool(toolKey)}
-                style={{
-                  ...styles.toolButton,
-                  background: meta.bg,
-                  borderColor: active ? "#3158d8" : meta.border,
-                  boxShadow: active ? "0 0 0 3px rgba(49,88,216,0.15)" : "none",
-                  transform: active ? "translateY(-2px)" : "none",
-                }}
-              >
-                <div style={{ ...styles.toolLabel, color: meta.text }}>{meta.label}</div>
-                <div style={{ ...styles.toolTitle, color: meta.text }}>{meta.title}</div>
-                <div style={{ ...styles.toolSub, color: meta.text }}>{meta.sub}</div>
-              </button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );
@@ -634,21 +616,20 @@ const styles = {
     borderRadius: "20px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
     padding: "8px 10px",
-    boxSizing: "border-box",
     textAlign: "center",
   },
   timerLabel: {
-    color: "rgba(255,255,255,0.72)",
-    fontSize: "11px",
-    fontWeight: 800,
+    fontSize: "10px",
+    fontWeight: 900,
+    color: "#c7d2fe",
     letterSpacing: "0.18em",
   },
   timerValue: {
-    color: "#ffffff",
-    fontSize: "32px",
-    fontWeight: 900,
+    fontSize: "36px",
     lineHeight: 1,
-    marginTop: "3px",
+    fontWeight: 900,
+    marginTop: "4px",
+    color: "#f8e77c",
   },
   tipRow: {
     display: "grid",
@@ -656,138 +637,110 @@ const styles = {
     gap: "6px",
   },
   tipChip: {
+    padding: "7px 4px",
     borderRadius: "999px",
+    fontWeight: 900,
     fontSize: "11px",
-    fontWeight: 800,
-    padding: "7px 8px",
     textAlign: "center",
     whiteSpace: "nowrap",
   },
   guideOverlay: {
     position: "absolute",
-    inset: 0,
-    background: "rgba(15,23,42,0.22)",
-    borderRadius: "22px",
-    display: "grid",
-    placeItems: "center",
-    zIndex: 4,
-    padding: "16px",
+    inset: "82px 10px auto 10px",
+    zIndex: 10,
   },
   guideCard: {
-    width: "100%",
-    maxWidth: "300px",
-    background: "#ffffff",
-    borderRadius: "22px",
-    padding: "18px 16px",
-    boxShadow: "0 20px 40px rgba(15,23,42,0.16)",
+    background: "rgba(255,255,255,0.98)",
+    borderRadius: "20px",
+    padding: "12px",
+    border: "1px solid #dbe4f0",
+    boxShadow: "0 12px 28px rgba(15,23,42,0.16)",
     display: "grid",
-    gap: "10px",
+    gap: "8px",
   },
   guideTitle: {
-    fontSize: "22px",
-    fontWeight: 900,
     color: "#0f172a",
+    fontSize: "17px",
+    fontWeight: 900,
     textAlign: "center",
   },
   guideLine: {
+    minHeight: "38px",
+    borderRadius: "12px",
+    border: "1px solid #dbe4f0",
     display: "flex",
     alignItems: "center",
     gap: "8px",
-    fontWeight: 700,
+    justifyContent: "center",
+    padding: "0 8px",
     color: "#334155",
+    fontWeight: 900,
     fontSize: "14px",
+    background: "#ffffff",
+    textAlign: "center",
+    whiteSpace: "nowrap",
   },
   guideDot: {
-    width: "12px",
-    height: "12px",
+    width: "11px",
+    height: "11px",
     borderRadius: "999px",
-    flex: "0 0 auto",
+    flexShrink: 0,
+    boxShadow: "0 0 0 2px rgba(255,255,255,0.9)",
   },
   guideButton: {
-    marginTop: "4px",
+    width: "100%",
+    minHeight: "46px",
     border: "none",
-    borderRadius: "14px",
-    background: "#3158d8",
+    borderRadius: "16px",
+    background: "linear-gradient(90deg, #24348f 0%, #4760ea 100%)",
     color: "#ffffff",
-    padding: "12px 14px",
-    fontSize: "15px",
+    fontSize: "16px",
     fontWeight: 900,
   },
   faceFrame: {
     position: "relative",
-    width: "100%",
-    aspectRatio: "1 / 1.08",
-    borderRadius: "24px",
+    borderRadius: "22px",
     overflow: "hidden",
-    background: "linear-gradient(180deg, #f9fcff 0%, #edf5ff 100%)",
-    border: "1px solid #dbe4f0",
+    background: "#d2d7de",
+    aspectRatio: "1 / 0.84",
     touchAction: "none",
+    userSelect: "none",
   },
   faceImage: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    userSelect: "none",
-    pointerEvents: "none",
+    display: "block",
   },
   spot: {
     position: "absolute",
     border: "none",
     background: "transparent",
+    padding: 0,
     borderRadius: "999px",
     display: "grid",
     placeItems: "center",
-    padding: 0,
+    transition: "transform 0.18s ease, opacity 0.2s ease",
     cursor: "pointer",
-    transition: "transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease",
   },
   foam: {
     position: "absolute",
-    width: "24px",
-    height: "24px",
+    width: "15px",
+    height: "15px",
     borderRadius: "999px",
     transform: "translate(-50%, -50%)",
-    background:
-      "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.78) 35%, rgba(227,240,255,0.16) 72%, rgba(227,240,255,0) 100%)",
-    boxShadow: "0 6px 16px rgba(147,197,253,0.22)",
+    background: "rgba(255,255,255,0.9)",
+    boxShadow: "0 0 0 2px rgba(255,255,255,0.5), 0 6px 12px rgba(255,255,255,0.45)",
     pointerEvents: "none",
   },
   smallStatus: {
-    minHeight: "22px",
-    textAlign: "center",
-    color: "#475569",
-    fontWeight: 800,
+    color: "#334155",
     fontSize: "13px",
-  },
-  toolGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: "8px",
-  },
-  toolButton: {
-    border: "2px solid transparent",
-    borderRadius: "18px",
-    padding: "10px 8px",
-    display: "grid",
-    gap: "2px",
+    fontWeight: 800,
+    minHeight: "18px",
+    padding: "0 2px",
     textAlign: "center",
-    transition: "all 0.18s ease",
-  },
-  toolLabel: {
-    fontSize: "11px",
-    fontWeight: 900,
-    opacity: 0.9,
-  },
-  toolTitle: {
-    fontSize: "14px",
-    fontWeight: 900,
-    lineHeight: 1.1,
     wordBreak: "keep-all",
-  },
-  toolSub: {
-    fontSize: "11px",
-    fontWeight: 700,
-    opacity: 0.95,
   },
 };
 
