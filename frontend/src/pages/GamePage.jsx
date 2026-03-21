@@ -9,15 +9,17 @@ const FACE_SRC = {
 };
 
 const SPOT_BLUEPRINTS = [
-  { id: "spot-1", x: 50, y: 40, type: "stage1" },
-  { id: "spot-2", x: 42, y: 47, type: "stage2" },
-  { id: "spot-3", x: 58, y: 47, type: "stage2" },
-  { id: "spot-4", x: 47, y: 55, type: "stage1" },
-  { id: "spot-5", x: 56, y: 58, type: "stage2" },
-  { id: "spot-6", x: 41, y: 60, type: "stage1" },
-  { id: "spot-7", x: 61, y: 60, type: "stage2" },
-  { id: "spot-8", x: 51, y: 64, type: "stage1" },
+  { id: "spot-1", x: 50, y: 40 },
+  { id: "spot-2", x: 42, y: 47 },
+  { id: "spot-3", x: 58, y: 47 },
+  { id: "spot-4", x: 47, y: 55 },
+  { id: "spot-5", x: 56, y: 58 },
+  { id: "spot-6", x: 41, y: 60 },
+  { id: "spot-7", x: 61, y: 60 },
+  { id: "spot-8", x: 51, y: 64 },
 ];
+
+const STAGE_KEYS = ["stage1", "stage2", "stage3"];
 
 const TOOL_META = {
   stage1: { label: "1단계", title: "딥클렌징", sub: "문지르기", bg: "#d97ab9", border: "#bb4f97", text: "#ffffff" },
@@ -87,10 +89,17 @@ function shuffle(list) {
   return [...list].sort(() => Math.random() - 0.5);
 }
 
-function buildSpotFromBlueprint(spot) {
+function pickRandomStage() {
+  return STAGE_KEYS[Math.floor(Math.random() * STAGE_KEYS.length)] || "stage1";
+}
+
+function buildSpotFromBlueprint(spot, forcedStage) {
+  const initialStage = forcedStage || pickRandomStage();
+
   return {
     ...spot,
-    currentStage: spot.type,
+    type: initialStage,
+    currentStage: initialStage,
     resolved: false,
     fading: false,
     wrongCount: 0,
@@ -100,7 +109,9 @@ function buildSpotFromBlueprint(spot) {
 }
 
 function buildSpots() {
-  return shuffle(SPOT_BLUEPRINTS).slice(0, 3).map(buildSpotFromBlueprint);
+  return shuffle(SPOT_BLUEPRINTS)
+    .slice(0, 3)
+    .map((spot) => buildSpotFromBlueprint(spot));
 }
 
 function getResultType(score) {
@@ -127,14 +138,23 @@ function computeScore(spots, timeLeft) {
 
     if (spot.resolved) {
       resolved += 1;
-      score += spot.type === "stage1" ? 18 : 22;
-    } else if (spot.type === "stage1" && spot.washCount >= 1) {
-      score += 6;
-    } else if (spot.type === "stage2" && spot.currentStage === "stage3") {
-      score += 8;
-    } else {
-      score -= 8;
+
+      if (spot.type === "stage1") {
+        score += 18;
+      } else if (spot.type === "stage2") {
+        score += 22;
+      } else {
+        score += 26;
+      }
+      return;
     }
+
+    if (spot.type === "stage2" && spot.currentStage === "stage3") {
+      score += 8;
+      return;
+    }
+
+    score -= 8;
   });
 
   score -= wrong * 8;
@@ -261,7 +281,6 @@ function GamePage() {
     });
   }, [faceKey, nickname]);
 
-
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (finishedRef.current || isGuideOpen) return;
@@ -360,18 +379,15 @@ function GamePage() {
         if (distance > 6 || Date.now() - lastRubAt < 120) return spot;
         lastRubAtRef.current.set(spot.id, Date.now());
 
-        const nextWashCount = Math.min(2, spot.washCount + 1);
-        const resolved = nextWashCount >= 2;
         const nextSpot = {
           ...spot,
-          washCount: nextWashCount,
-          resolved,
+          washCount: 1,
+          resolved: true,
           actionLog: [...spot.actionLog, "stage1"],
         };
 
-        setStatusMessage(resolved ? "분홍 포인트 정리 완료" : "한 번 더 문질러 주세요");
-
-        if (resolved) triggerFadeOut(spot.id);
+        setStatusMessage("분홍 포인트 정리 완료");
+        triggerFadeOut(spot.id);
         return nextSpot;
       })
     );
@@ -416,7 +432,7 @@ function GamePage() {
 
         if (spot.currentStage === "stage3") {
           if (selectedTool !== "stage3") {
-            setStatusMessage("살구는 3단계예요");
+            setStatusMessage("살구는 1번만 정확하게 눌러야 해요");
             return { ...spot, wrongCount: spot.wrongCount + 1 };
           }
 
@@ -463,9 +479,9 @@ function GamePage() {
           <div style={styles.guideOverlay}>
             <div style={styles.guideCard}>
               <div style={styles.guideTitle}>이것만 기억하면 돼요</div>
-              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#d97ab9" }} />분홍은 문지르기</div>
-              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#82c6f5" }} />하늘은 2단계 터치</div>
-              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#e7a27b" }} />살구는 3단계 터치</div>
+              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#d97ab9" }} />분홍은 문지르면 바로 제거</div>
+              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#82c6f5" }} />하늘은 2단계 터치 후 살구로 변경</div>
+              <div style={styles.guideLine}><span style={{ ...styles.guideDot, background: "#e7a27b" }} />살구는 1번 정확히 터치하면 제거</div>
               <button type="button" style={styles.guideButton} onClick={() => setIsGuideOpen(false)}>바로 시작</button>
             </div>
           </div>
@@ -618,20 +634,21 @@ const styles = {
     borderRadius: "20px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
     padding: "8px 10px",
+    boxSizing: "border-box",
     textAlign: "center",
   },
   timerLabel: {
-    fontSize: "10px",
-    fontWeight: 900,
-    color: "#c7d2fe",
+    color: "rgba(255,255,255,0.72)",
+    fontSize: "11px",
+    fontWeight: 800,
     letterSpacing: "0.18em",
   },
   timerValue: {
-    fontSize: "36px",
-    lineHeight: 1,
+    color: "#ffffff",
+    fontSize: "32px",
     fontWeight: 900,
-    marginTop: "4px",
-    color: "#f8e77c",
+    lineHeight: 1,
+    marginTop: "3px",
   },
   tipRow: {
     display: "grid",
@@ -639,145 +656,138 @@ const styles = {
     gap: "6px",
   },
   tipChip: {
-    padding: "7px 4px",
     borderRadius: "999px",
-    fontWeight: 900,
     fontSize: "11px",
+    fontWeight: 800,
+    padding: "7px 8px",
     textAlign: "center",
     whiteSpace: "nowrap",
   },
   guideOverlay: {
     position: "absolute",
-    inset: "82px 10px auto 10px",
-    zIndex: 10,
+    inset: 0,
+    background: "rgba(15,23,42,0.22)",
+    borderRadius: "22px",
+    display: "grid",
+    placeItems: "center",
+    zIndex: 4,
+    padding: "16px",
   },
   guideCard: {
-    background: "rgba(255,255,255,0.98)",
-    borderRadius: "20px",
-    padding: "12px",
-    border: "1px solid #dbe4f0",
-    boxShadow: "0 12px 28px rgba(15,23,42,0.16)",
+    width: "100%",
+    maxWidth: "300px",
+    background: "#ffffff",
+    borderRadius: "22px",
+    padding: "18px 16px",
+    boxShadow: "0 20px 40px rgba(15,23,42,0.16)",
     display: "grid",
-    gap: "8px",
+    gap: "10px",
   },
   guideTitle: {
-    color: "#0f172a",
-    fontSize: "17px",
+    fontSize: "22px",
     fontWeight: 900,
+    color: "#0f172a",
     textAlign: "center",
   },
   guideLine: {
-    minHeight: "38px",
-    borderRadius: "12px",
-    border: "1px solid #dbe4f0",
     display: "flex",
     alignItems: "center",
     gap: "8px",
-    justifyContent: "center",
-    padding: "0 8px",
+    fontWeight: 700,
     color: "#334155",
-    fontWeight: 900,
     fontSize: "14px",
-    background: "#ffffff",
-    textAlign: "center",
-    whiteSpace: "nowrap",
   },
   guideDot: {
-    width: "11px",
-    height: "11px",
+    width: "12px",
+    height: "12px",
     borderRadius: "999px",
-    flexShrink: 0,
-    boxShadow: "0 0 0 2px rgba(255,255,255,0.9)",
+    flex: "0 0 auto",
   },
   guideButton: {
-    width: "100%",
-    minHeight: "46px",
+    marginTop: "4px",
     border: "none",
-    borderRadius: "16px",
-    background: "linear-gradient(90deg, #24348f 0%, #4760ea 100%)",
+    borderRadius: "14px",
+    background: "#3158d8",
     color: "#ffffff",
-    fontSize: "16px",
+    padding: "12px 14px",
+    fontSize: "15px",
     fontWeight: 900,
   },
   faceFrame: {
     position: "relative",
-    borderRadius: "22px",
+    width: "100%",
+    aspectRatio: "1 / 1.08",
+    borderRadius: "24px",
     overflow: "hidden",
-    background: "#d2d7de",
-    aspectRatio: "1 / 0.84",
+    background: "linear-gradient(180deg, #f9fcff 0%, #edf5ff 100%)",
+    border: "1px solid #dbe4f0",
     touchAction: "none",
-    userSelect: "none",
   },
   faceImage: {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    display: "block",
+    userSelect: "none",
+    pointerEvents: "none",
   },
   spot: {
     position: "absolute",
     border: "none",
     background: "transparent",
-    padding: 0,
     borderRadius: "999px",
     display: "grid",
     placeItems: "center",
-    transition: "transform 0.18s ease, opacity 0.2s ease",
+    padding: 0,
+    cursor: "pointer",
+    transition: "transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease",
   },
   foam: {
     position: "absolute",
-    width: "15px",
-    height: "15px",
+    width: "24px",
+    height: "24px",
     borderRadius: "999px",
     transform: "translate(-50%, -50%)",
-    background: "rgba(255,255,255,0.9)",
-    boxShadow: "0 0 0 2px rgba(255,255,255,0.5), 0 6px 12px rgba(255,255,255,0.45)",
+    background:
+      "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.78) 35%, rgba(227,240,255,0.16) 72%, rgba(227,240,255,0) 100%)",
+    boxShadow: "0 6px 16px rgba(147,197,253,0.22)",
     pointerEvents: "none",
   },
   smallStatus: {
-    color: "#334155",
-    fontSize: "13px",
-    fontWeight: 800,
-    minHeight: "18px",
-    padding: "0 2px",
+    minHeight: "22px",
     textAlign: "center",
-    wordBreak: "keep-all",
+    color: "#475569",
+    fontWeight: 800,
+    fontSize: "13px",
   },
   toolGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
     gap: "8px",
-    position: "sticky",
-    bottom: "6px",
-    background: "rgba(255,255,255,0.9)",
-    backdropFilter: "blur(6px)",
-    paddingTop: "2px",
   },
   toolButton: {
-    minHeight: "96px",
-    borderRadius: "18px",
     border: "2px solid transparent",
-    padding: "8px 6px",
+    borderRadius: "18px",
+    padding: "10px 8px",
     display: "grid",
-    alignContent: "center",
-    gap: "3px",
+    gap: "2px",
+    textAlign: "center",
+    transition: "all 0.18s ease",
   },
   toolLabel: {
-    fontSize: "13px",
+    fontSize: "11px",
     fontWeight: 900,
-    textAlign: "center",
+    opacity: 0.9,
   },
   toolTitle: {
-    fontSize: "13px",
-    lineHeight: 1.1,
+    fontSize: "14px",
     fontWeight: 900,
-    textAlign: "center",
+    lineHeight: 1.1,
     wordBreak: "keep-all",
   },
   toolSub: {
     fontSize: "11px",
-    fontWeight: 800,
-    textAlign: "center",
+    fontWeight: 700,
+    opacity: 0.95,
   },
 };
 
