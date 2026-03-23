@@ -3,6 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const TOTAL_TIME = 10;
+const FEVER_TIME_THRESHOLD = 3;
+const COMBO_WINDOW_MS = 1300;
+const FLOAT_LIFETIME_MS = 820;
+const RAGE_STAGE_UP_MS = 1900;
 
 const FACE_SRC = {
   male: "/faces/male_face_game.png",
@@ -21,6 +25,7 @@ const SPOT_BLUEPRINTS = [
 ];
 
 const STAGE_KEYS = ["stage1", "stage2", "stage3"];
+const VARIANT_KEYS = ["normal", "golden", "bubble", "rage", "trap"];
 
 const RAW_BASE_CANDIDATES = [
   import.meta.env.VITE_API_BASE_URL,
@@ -85,132 +90,188 @@ function shuffle(list) {
 }
 
 function pickRandomStage() {
-  return STAGE_KEYS[Math.floor(Math.random() * STAGE_KEYS.length)] || "stage1";
+  const roll = Math.random();
+  if (roll < 0.4) return "stage1";
+  if (roll < 0.78) return "stage2";
+  return "stage3";
 }
 
-function buildSpotFromBlueprint(spot, forcedStage) {
+function pickRandomVariant(isFever) {
+  const roll = Math.random();
+
+  if (isFever) {
+    if (roll < 0.2) return "golden";
+    if (roll < 0.34) return "bubble";
+    if (roll < 0.46) return "rage";
+    if (roll < 0.53) return "trap";
+    return "normal";
+  }
+
+  if (roll < 0.12) return "golden";
+  if (roll < 0.22) return "bubble";
+  if (roll < 0.3) return "rage";
+  if (roll < 0.35) return "trap";
+  return "normal";
+}
+
+function getVariantReward(variant) {
+  if (variant === "golden") return 18;
+  if (variant === "bubble") return 12;
+  if (variant === "rage") return 10;
+  if (variant === "trap") return 8;
+  return 0;
+}
+
+function buildSpotFromBlueprint(spot, options = {}) {
+  const { forcedStage, isFever = false } = options;
+  const variant = options.variant || pickRandomVariant(isFever);
   const initialStage = forcedStage || pickRandomStage();
+  const now = nowMs();
 
   return {
     ...spot,
+    spawnKey: makeClientId(spot.id),
     type: initialStage,
     currentStage: initialStage,
+    variant,
     resolved: false,
     fading: false,
     wrongCount: 0,
     washCount: 0,
     actionLog: [],
+    bornAt: now,
+    stageDeadlineAt: variant === "rage" ? now + RAGE_STAGE_UP_MS : null,
+    bonusReward: getVariantReward(variant),
+    trapMissArmed: variant === "trap",
+    feverSpawned: isFever,
   };
 }
 
-function buildSpots() {
+
+function nowMs() {
+  return Date.now();
+}
+
+function makeClientId(prefix = "fx") {
+  return `${prefix}-${nowMs()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function buildSpots(isFever = false) {
   return shuffle(SPOT_BLUEPRINTS)
     .slice(0, 3)
-    .map((spot) => buildSpotFromBlueprint(spot));
+    .map((spot) => buildSpotFromBlueprint(spot, { isFever }));
 }
 
 function getResultType(score) {
-  if (score >= 130) return "세안 밸런스 마스터";
-  if (score >= 100) return "안정적인 케어형";
-  if (score >= 75) return "조금만 더 익숙해지면";
+  if (score >= 165) return "세안 밸런스 레전드";
+  if (score >= 135) return "세안 밸런스 마스터";
+  if (score >= 105) return "안정적인 케어형";
+  if (score >= 80) return "조금만 더 익숙해지면";
   return "순서부터 익히는 중";
 }
 
 function getResultMessage(score) {
-  if (score >= 130) return "단계를 거의 놓치지 않고 아주 깔끔하게 마무리했어요.";
-  if (score >= 100) return "실수가 조금 있어도 전체 흐름을 안정적으로 잘 맞췄어요.";
-  if (score >= 75) return "조금만 더 익숙해지면 100점은 충분히 넘길 수 있어요.";
-  return "색과 순서를 한 번 더 익히면 점수가 빠르게 올라갈 거예요.";
+  if (score >= 165) return "콤보와 특수 포인트까지 거의 완벽하게 챙겼어요.";
+  if (score >= 135) return "실수는 적고 템포는 빠르게, 상위권 플레이였어요.";
+  if (score >= 105) return "흐름을 잘 타기 시작했어요. 조금만 더 다듬으면 고득점권이에요.";
+  if (score >= 80) return "한두 번만 더 익히면 랭킹 경쟁이 가능한 점수대예요.";
+  return "분홍은 문지르기, 하늘/살구는 클릭 순서를 더 익히면 점수가 빠르게 올라가요.";
 }
 
-function computeScore(spots, timeLeft) {
-  let score = 60;
-  let wrong = 0;
-  let resolved = 0;
+function computeScore(stats, timeLeft, activeSpots = []) {
+  const unresolved = activeSpots.filter((spot) => !spot.resolved && !spot.fading).length;
+  const totalSpawned = Math.max(stats.totalSpawned, 1);
+  const totalResolved = stats.stage1Resolved + stats.stage23Resolved;
+  const clearRate = totalResolved / totalSpawned;
 
-  spots.forEach((spot) => {
-    wrong += spot.wrongCount;
+  let score = 78;
+  score += stats.stage1Resolved * 14;
+  score += stats.stage23Resolved * 24;
+  score += stats.goldenResolved * 16;
+  score += stats.bubbleResolved * 11;
+  score += stats.rageResolved * 13;
+  score += stats.trapResolved * 9;
+  score += stats.chainExplosions * 8;
+  score += stats.comboBonus;
+  score += stats.bestCombo * 5;
+  score += Math.round(clearRate * 38);
+  score += Math.max(0, timeLeft) * 5;
+  score -= stats.wrongCount * 3;
+  score -= stats.stageDrops * 5;
+  score -= unresolved * 5;
 
-    if (spot.resolved) {
-      resolved += 1;
+  if (stats.bestCombo >= 4) score += 12;
+  if (stats.bestCombo >= 7) score += 16;
+  if (clearRate >= 0.85) score += 15;
+  if (clearRate >= 0.95) score += 12;
 
-      if (spot.type === "stage1") {
-        score += 20;
-      } else if (spot.type === "stage2") {
-        score += 26;
-      } else {
-        score += 32;
-      }
-      return;
-    }
-
-    if (spot.type === "stage2" && spot.currentStage === "stage3") {
-      score += 10;
-      return;
-    }
-
-    score -= 4;
-  });
-
-  if (resolved >= 4) {
-    score += 8;
-  }
-
-  score -= wrong * 3;
-  score += Math.max(0, timeLeft) * 2;
   score = Math.max(0, Math.round(score));
 
-  return { score, wrong, resolved };
+  return {
+    score,
+    wrong: stats.wrongCount,
+    resolved: totalResolved,
+    unresolved,
+    totalSpawned,
+    clearRate,
+  };
 }
 
 function getSpotView(spot) {
   const fadedOpacity = spot.fading ? 0 : 1;
-  const fadedScale = spot.fading ? 0.56 : 1;
+  const fadedScale = spot.fading ? 0.54 : 1;
+  const isGolden = spot.variant === "golden";
+  const isBubble = spot.variant === "bubble";
+  const isRage = spot.variant === "rage";
+  const isTrap = spot.variant === "trap";
+
+  const base = {
+    size: isGolden ? 12 : 10,
+    hitSize: isGolden || isBubble ? 30 : 28,
+    opacity: fadedOpacity,
+    scale: fadedScale,
+  };
 
   if (spot.resolved) {
     return {
-      size: 10,
-      hitSize: 26,
+      ...base,
       color: "rgba(231,162,123,0.95)",
       ring: "0 0 0 3px rgba(255,229,213,0.92)",
       border: "2px solid rgba(255,255,255,0.96)",
-      opacity: fadedOpacity,
-      scale: fadedScale,
     };
+  }
+
+  let color = "rgba(217,122,185,0.98)";
+  let ring = "0 0 0 2px rgba(253,231,242,0.95)";
+  let border = "2px solid rgba(255,255,255,0.98)";
+
+  if (spot.currentStage === "stage2") {
+    color = "rgba(130,198,245,0.98)";
+    ring = "0 0 0 2px rgba(226,243,255,0.94)";
   }
 
   if (spot.currentStage === "stage3") {
-    return {
-      size: 10,
-      hitSize: 26,
-      color: "rgba(231,162,123,0.98)",
-      ring: "0 0 0 2px rgba(255,229,213,0.9)",
-      border: "2px solid rgba(255,248,244,0.98)",
-      opacity: 1,
-      scale: 1,
-    };
+    color = "rgba(231,162,123,0.98)";
+    ring = "0 0 0 2px rgba(255,229,213,0.9)";
+    border = "2px solid rgba(255,248,244,0.98)";
   }
 
-  if (spot.currentStage === "stage2") {
-    return {
-      size: 10,
-      hitSize: 26,
-      color: "rgba(130,198,245,0.98)",
-      ring: "0 0 0 2px rgba(226,243,255,0.94)",
-      border: "2px solid rgba(255,255,255,0.98)",
-      opacity: 1,
-      scale: 1,
-    };
+  if (isGolden) {
+    ring = "0 0 0 3px rgba(255,241,166,0.95), 0 0 20px rgba(255,215,84,0.7)";
+    border = "2px solid rgba(255,248,200,0.98)";
+  } else if (isBubble) {
+    ring = `${ring}, 0 0 18px rgba(255,255,255,0.55)`;
+  } else if (isRage) {
+    ring = `${ring}, 0 0 18px rgba(255,111,111,0.42)`;
+  } else if (isTrap) {
+    ring = `${ring}, 0 0 18px rgba(131,82,255,0.32)`;
   }
 
   return {
-    size: 10,
-    hitSize: 26,
-    color: "rgba(217,122,185,0.98)",
-    ring: "0 0 0 2px rgba(253,231,242,0.95)",
-    border: "2px solid rgba(255,255,255,0.98)",
-    opacity: 1,
-    scale: 1,
+    ...base,
+    color,
+    ring,
+    border,
   };
 }
 
@@ -230,6 +291,22 @@ function GamePage() {
   const finishedRef = useRef(false);
   const spawnIntervalRef = useRef(null);
   const timeLeftRef = useRef(TOTAL_TIME);
+  const comboRef = useRef({ count: 0, lastResolvedAt: 0 });
+  const statsRef = useRef({
+    totalSpawned: 3,
+    stage1Resolved: 0,
+    stage23Resolved: 0,
+    wrongCount: 0,
+    goldenResolved: 0,
+    bubbleResolved: 0,
+    rageResolved: 0,
+    trapResolved: 0,
+    chainExplosions: 0,
+    comboBonus: 0,
+    bestCombo: 0,
+    stageDrops: 0,
+  });
+
   const selectedFaceKey = localStorage.getItem("selectedFaceKey");
   const nickname = localStorage.getItem("nickname") || "PLAYER";
 
@@ -237,14 +314,67 @@ function GamePage() {
     selectedFaceKey === "male" || selectedFaceKey === "female" ? selectedFaceKey : "female"
   );
   const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
-  const [spots, setSpots] = useState(() => buildSpots());
+  const [spots, setSpots] = useState(() => buildSpots(false));
   const [statusMessage, setStatusMessage] = useState("분홍은 문지르기, 하늘/살구는 클릭으로 처리하세요.");
   const [foamPoints, setFoamPoints] = useState([]);
+  const [floatingTexts, setFloatingTexts] = useState([]);
   const [isGuideOpen, setIsGuideOpen] = useState(true);
   const [isRubbing, setIsRubbing] = useState(false);
+  const [combo, setCombo] = useState(0);
+  const [bestCombo, setBestCombo] = useState(0);
+  const [liveScore, setLiveScore] = useState(0);
 
   const unresolvedCount = useMemo(() => spots.filter((spot) => !spot.resolved && !spot.fading).length, [spots]);
   const faceSrc = FACE_SRC[faceKey] || FACE_SRC.female;
+  const isFever = timeLeft <= FEVER_TIME_THRESHOLD;
+
+  const pushFloatingText = (x, y, text, kind = "score") => {
+    setFloatingTexts((prev) => [
+      ...prev.filter((item) => item.expiresAt > nowMs()).slice(-8),
+      {
+        id: makeClientId("float"),
+        x,
+        y,
+        text,
+        kind,
+        expiresAt: nowMs() + FLOAT_LIFETIME_MS,
+      },
+    ]);
+  };
+
+  const updateLiveScore = () => {
+    const preview = computeScore(statsRef.current, timeLeftRef.current, spots);
+    setLiveScore(preview.score);
+  };
+
+  const registerComboSuccess = (spot, bonusScore = 0) => {
+    const now = nowMs();
+    const nextCombo = now - comboRef.current.lastResolvedAt <= COMBO_WINDOW_MS ? comboRef.current.count + 1 : 1;
+    comboRef.current = {
+      count: nextCombo,
+      lastResolvedAt: now,
+    };
+
+    setCombo(nextCombo);
+    setBestCombo((prev) => {
+      const next = Math.max(prev, nextCombo);
+      statsRef.current.bestCombo = Math.max(statsRef.current.bestCombo, next);
+      return next;
+    });
+
+    const comboBonus = nextCombo >= 2 ? nextCombo * 3 + (isFever ? 3 : 0) : 0;
+    statsRef.current.comboBonus += comboBonus + bonusScore;
+
+    if (nextCombo >= 2) {
+      pushFloatingText(spot.x, spot.y - 6, `COMBO x${nextCombo}`, "combo");
+      setStatusMessage(nextCombo >= 5 ? "콤보가 붙었어요! 계속 이어가세요" : "좋아요! 콤보가 시작됐어요");
+    }
+  };
+
+  const resetComboOnMiss = () => {
+    comboRef.current = { ...comboRef.current, count: 0 };
+    setCombo(0);
+  };
 
   const triggerFadeOut = (spotId) => {
     window.setTimeout(() => {
@@ -258,14 +388,96 @@ function GamePage() {
     }, 220);
   };
 
-  const spawnSpot = () => {
+  const registerResolve = (spot, options = {}) => {
+    const {
+      scoreText = null,
+      status = "깔끔하게 처리했어요",
+      chainReaction = false,
+      comboBonus = 0,
+    } = options;
+
+    if (spot.type === "stage1") {
+      statsRef.current.stage1Resolved += 1;
+    } else {
+      statsRef.current.stage23Resolved += 1;
+    }
+
+    if (spot.variant === "golden") statsRef.current.goldenResolved += 1;
+    if (spot.variant === "bubble") statsRef.current.bubbleResolved += 1;
+    if (spot.variant === "rage") statsRef.current.rageResolved += 1;
+    if (spot.variant === "trap") statsRef.current.trapResolved += 1;
+    if (chainReaction) statsRef.current.chainExplosions += 1;
+
+    registerComboSuccess(spot, comboBonus);
+    setStatusMessage(status);
+
+    if (scoreText) {
+      pushFloatingText(spot.x, spot.y - 4, scoreText, spot.variant === "golden" ? "gold" : "score");
+    }
+  };
+
+  const chainBoostNearestSpot = (sourceSpotId) => {
+    let impacted = false;
+
+    setSpots((prev) => {
+      const source = prev.find((spot) => spot.id === sourceSpotId);
+      if (!source) return prev;
+
+      const candidates = prev
+        .filter((spot) => !spot.resolved && !spot.fading && spot.id !== sourceSpotId)
+        .sort((a, b) => {
+          const da = Math.hypot(a.x - source.x, a.y - source.y);
+          const db = Math.hypot(b.x - source.x, b.y - source.y);
+          return da - db;
+        });
+
+      const target = candidates[0];
+      if (!target) return prev;
+      impacted = true;
+
+      return prev.map((spot) => {
+        if (spot.id !== target.id) return spot;
+
+        if (spot.currentStage === "stage1") {
+          return {
+            ...spot,
+            resolved: true,
+            actionLog: [...spot.actionLog, "bubble_chain_stage1"],
+          };
+        }
+
+        if (spot.currentStage === "stage2") {
+          return {
+            ...spot,
+            currentStage: "stage3",
+            actionLog: [...spot.actionLog, "bubble_chain_to_stage3"],
+          };
+        }
+
+        return {
+          ...spot,
+          resolved: true,
+          actionLog: [...spot.actionLog, "bubble_chain_stage3"],
+        };
+      });
+    });
+
+    return impacted;
+  };
+
+  const spawnSpot = (options = {}) => {
+    const { force = false } = options;
+
     setSpots((prev) => {
       const activeIds = new Set(prev.filter((spot) => !spot.fading && !spot.resolved).map((spot) => spot.id));
       const candidate = shuffle(SPOT_BLUEPRINTS).find((blueprint) => !activeIds.has(blueprint.id));
       if (!candidate) return prev;
+      if (!force && activeIds.size >= 5) return prev;
 
-      setStatusMessage("새 포인트가 생겼어요.");
-      return [...prev, buildSpotFromBlueprint(candidate)];
+      const nextSpot = buildSpotFromBlueprint(candidate, { isFever: timeLeftRef.current <= FEVER_TIME_THRESHOLD });
+      statsRef.current.totalSpawned += 1;
+      setStatusMessage(nextSpot.variant === "golden" ? "골든 포인트 등장! 놓치지 마세요" : "새 포인트가 생겼어요.");
+      return [...prev, nextSpot];
     });
   };
 
@@ -300,12 +512,20 @@ function GamePage() {
   }, [timeLeft]);
 
   useEffect(() => {
+    updateLiveScore();
+  }, [spots, timeLeft]);
+
+  useEffect(() => {
     if (finishedRef.current || isGuideOpen) return;
 
     if (timeLeft === 0) {
       finishedRef.current = true;
 
-      const { score, wrong, resolved } = computeScore(spots, timeLeft);
+      const { score, wrong, resolved, unresolved, totalSpawned, clearRate } = computeScore(
+        statsRef.current,
+        timeLeft,
+        spots
+      );
       const resultType = getResultType(score);
       const payload = {
         nickname,
@@ -313,9 +533,18 @@ function GamePage() {
         grade: resultType,
         resultType,
         resultMessage: getResultMessage(score),
-        scenarioSummary: `정리 ${resolved}/${spots.length} · 오답 ${wrong}회`,
+        scenarioSummary: `정리 ${resolved}/${totalSpawned} · 미정리 ${unresolved} · 오답 ${wrong}회 · 최고콤보 ${statsRef.current.bestCombo}`,
         ctaText: "와디즈 보러가기",
         currentAttemptAt: new Date().toISOString(),
+        meta: {
+          clearRate,
+          goldenResolved: statsRef.current.goldenResolved,
+          bubbleResolved: statsRef.current.bubbleResolved,
+          rageResolved: statsRef.current.rageResolved,
+          trapResolved: statsRef.current.trapResolved,
+          chainExplosions: statsRef.current.chainExplosions,
+          bestCombo: statsRef.current.bestCombo,
+        },
       };
 
       localStorage.setItem("lastGameResult", JSON.stringify(payload));
@@ -330,12 +559,23 @@ function GamePage() {
     if (!foamPoints.length) return undefined;
 
     const timer = window.setTimeout(() => {
-      const now = Date.now();
+      const now = nowMs();
       setFoamPoints((prev) => prev.filter((point) => point.expiresAt > now));
     }, 80);
 
     return () => window.clearTimeout(timer);
   }, [foamPoints]);
+
+  useEffect(() => {
+    if (!floatingTexts.length) return undefined;
+
+    const timer = window.setTimeout(() => {
+      const now = nowMs();
+      setFloatingTexts((prev) => prev.filter((item) => item.expiresAt > now));
+    }, 90);
+
+    return () => window.clearTimeout(timer);
+  }, [floatingTexts]);
 
   useEffect(() => {
     if (spawnIntervalRef.current) {
@@ -344,10 +584,12 @@ function GamePage() {
 
     spawnIntervalRef.current = window.setInterval(() => {
       if (finishedRef.current || isGuideOpen || timeLeftRef.current <= 0) return;
-      if (Math.random() < 0.88) {
+      const feverMode = timeLeftRef.current <= FEVER_TIME_THRESHOLD;
+      const chance = feverMode ? 0.96 : 0.9;
+      if (Math.random() < chance) {
         spawnSpot();
       }
-    }, 2000);
+    }, isFever ? 1200 : 1850);
 
     return () => {
       if (spawnIntervalRef.current) {
@@ -355,19 +597,66 @@ function GamePage() {
         spawnIntervalRef.current = null;
       }
     };
-  }, [isGuideOpen]);
+  }, [isGuideOpen, isFever]);
 
-useEffect(() => {
-  if (finishedRef.current || isGuideOpen || timeLeft <= 0) return;
-  if (unresolvedCount !== 0) return;
+  useEffect(() => {
+    if (finishedRef.current || isGuideOpen || timeLeft <= 0) return;
+    if (unresolvedCount !== 0) return;
 
-  const timer = window.setTimeout(() => {
-    if (finishedRef.current || timeLeftRef.current <= 0) return;
-    spawnSpot();
-  }, 0);
+    const timer = window.setTimeout(() => {
+      if (finishedRef.current || timeLeftRef.current <= 0) return;
+      spawnSpot({ force: true });
+    }, 0);
 
-  return () => window.clearTimeout(timer);
-}, [unresolvedCount, isGuideOpen, timeLeft]);
+    return () => window.clearTimeout(timer);
+  }, [unresolvedCount, isGuideOpen, timeLeft]);
+
+  useEffect(() => {
+    if (finishedRef.current || isGuideOpen || timeLeft <= 0) return undefined;
+
+    const timer = window.setInterval(() => {
+      let didDrop = false;
+
+      setSpots((prev) => {
+        const now = nowMs();
+        return prev.map((spot) => {
+          if (spot.resolved || spot.fading || spot.variant !== "rage" || !spot.stageDeadlineAt) return spot;
+          if (now < spot.stageDeadlineAt) return spot;
+
+          didDrop = true;
+          statsRef.current.stageDrops += 1;
+
+          if (spot.currentStage === "stage1") {
+            return {
+              ...spot,
+              currentStage: "stage2",
+              stageDeadlineAt: now + RAGE_STAGE_UP_MS,
+            };
+          }
+
+          if (spot.currentStage === "stage2") {
+            return {
+              ...spot,
+              currentStage: "stage3",
+              stageDeadlineAt: now + RAGE_STAGE_UP_MS,
+            };
+          }
+
+          return {
+            ...spot,
+            stageDeadlineAt: now + RAGE_STAGE_UP_MS,
+          };
+        });
+      });
+
+      if (didDrop) {
+        resetComboOnMiss();
+        setStatusMessage("폭주 포인트가 더 까다로워졌어요!");
+      }
+    }, 180);
+
+    return () => window.clearInterval(timer);
+  }, [isGuideOpen, timeLeft]);
 
   const applyStage1 = (position) => {
     if (!position) return;
@@ -383,8 +672,8 @@ useEffect(() => {
     if (!insideFace) return;
 
     setFoamPoints((prev) => [
-      ...prev.filter((point) => point.expiresAt > Date.now()).slice(-10),
-      { ...position, id: `${Date.now()}-${Math.random()}`, expiresAt: Date.now() + 220 },
+      ...prev.filter((point) => point.expiresAt > nowMs()).slice(-12),
+      { ...position, id: makeClientId("foam"), expiresAt: nowMs() + 220 },
     ]);
 
     setSpots((prev) =>
@@ -394,10 +683,30 @@ useEffect(() => {
         const distance = Math.hypot(position.x - spot.x, position.y - spot.y);
         const lastRubAt = lastRubAtRef.current.get(spot.id) || 0;
 
-        if (distance > 7.5 || Date.now() - lastRubAt < 80) return spot;
-        lastRubAtRef.current.set(spot.id, Date.now());
+        if (distance > 8.2 || nowMs() - lastRubAt < 70) return spot;
+        lastRubAtRef.current.set(spot.id, nowMs());
 
-        setStatusMessage("좋아요! 분홍 포인트를 깔끔하게 정리했어요");
+        let status = "좋아요! 분홍 포인트를 깔끔하게 정리했어요";
+        let scoreText = "+14";
+        let comboBonus = 0;
+
+        if (spot.variant === "golden") {
+          status = "골든 포인트 대성공!";
+          scoreText = "+30";
+          comboBonus += 8;
+        } else if (spot.variant === "bubble") {
+          status = "버블 보너스! 주변까지 튀어요";
+          scoreText = "+22";
+          comboBonus += 5;
+        } else if (spot.variant === "rage") {
+          status = "폭주 포인트를 제때 잡았어요";
+          scoreText = "+20";
+        } else if (spot.variant === "trap") {
+          status = "함정 포인트도 정확하게 처리했어요";
+          scoreText = "+18";
+        }
+
+        registerResolve(spot, { scoreText, status, comboBonus });
         triggerFadeOut(spot.id);
 
         return {
@@ -433,27 +742,59 @@ useEffect(() => {
         if (spot.id !== spotId) return spot;
 
         if (spot.resolved || spot.fading) {
-          setStatusMessage("살구는 1번만 누르면 끝이에요");
+          statsRef.current.wrongCount += 1;
+          resetComboOnMiss();
+          setStatusMessage("이미 끝난 포인트예요. 다음 걸 노려보세요");
           return { ...spot, wrongCount: spot.wrongCount + 1 };
         }
 
         if (spot.currentStage === "stage1") {
-          setStatusMessage("분홍은 클릭 말고 문질러 주세요");
+          statsRef.current.wrongCount += 1;
+          resetComboOnMiss();
+          setStatusMessage(spot.variant === "trap" ? "함정! 분홍은 문질러야 해요" : "분홍은 클릭 말고 문질러 주세요");
           return { ...spot, wrongCount: spot.wrongCount + 1 };
         }
 
         if (spot.currentStage === "stage2") {
-          setStatusMessage("좋아요. 마지막으로 살구를 1번만 누르세요");
+          setStatusMessage(
+            spot.variant === "golden" ? "골든 포인트! 마지막 한 번만 더" : "좋아요. 마지막으로 살구를 1번만 누르세요"
+          );
           return {
             ...spot,
             currentStage: "stage3",
             actionLog: [...spot.actionLog, "stage2"],
+            stageDeadlineAt: spot.variant === "rage" ? nowMs() + RAGE_STAGE_UP_MS : spot.stageDeadlineAt,
           };
         }
 
         if (spot.currentStage === "stage3") {
+          let status = "살구까지 마무리했어요";
+          let scoreText = "+24";
+          let comboBonus = isFever ? 4 : 0;
+          let chainReaction = false;
+
+          if (spot.variant === "golden") {
+            status = "골든 포인트 클리어! 점수 대폭 상승";
+            scoreText = "+42";
+            comboBonus += 10;
+          } else if (spot.variant === "bubble") {
+            const impacted = chainBoostNearestSpot(spot.id);
+            chainReaction = impacted;
+            status = impacted ? "버블 연쇄! 주변 포인트까지 영향을 줬어요" : "버블 보너스 성공!";
+            scoreText = impacted ? "+36" : "+30";
+            comboBonus += impacted ? 8 : 4;
+          } else if (spot.variant === "rage") {
+            status = "폭주 포인트를 막판에 잡아냈어요";
+            scoreText = "+33";
+            comboBonus += 5;
+          } else if (spot.variant === "trap") {
+            status = "함정 포인트도 정확하게 처리했어요";
+            scoreText = "+28";
+            comboBonus += 3;
+          }
+
+          registerResolve(spot, { scoreText, status, chainReaction, comboBonus });
           triggerFadeOut(spot.id);
-          setStatusMessage("살구까지 마무리했어요");
           return {
             ...spot,
             resolved: true,
@@ -479,10 +820,17 @@ useEffect(() => {
         <div style={styles.headerRow}>
           <div>
             <h1 style={styles.title}>이 부위, 어떻게 씻을까?</h1>
+            <div style={styles.subtitle}>콤보와 특수 포인트를 챙기면 점수가 크게 올라가요</div>
           </div>
-          <div style={styles.timerBox}>
-            <div style={styles.timerLabel}>TIME</div>
-            <div style={styles.timerValue}>{String(timeLeft).padStart(2, "0")}</div>
+          <div style={styles.scoreTimerWrap}>
+            <div style={styles.scoreBox}>
+              <div style={styles.scoreLabel}>SCORE</div>
+              <div style={styles.scoreValue}>{liveScore}</div>
+            </div>
+            <div style={{ ...styles.timerBox, ...(isFever ? styles.timerBoxFever : {}) }}>
+              <div style={styles.timerLabel}>{isFever ? "FEVER" : "TIME"}</div>
+              <div style={styles.timerValue}>{String(timeLeft).padStart(2, "0")}</div>
+            </div>
           </div>
         </div>
 
@@ -490,6 +838,13 @@ useEffect(() => {
           <div style={{ ...styles.tipChip, background: "#fde7f2", color: "#b83280" }}>분홍 = 문지르기</div>
           <div style={{ ...styles.tipChip, background: "#e2f3ff", color: "#1f6fb2" }}>하늘 = 클릭</div>
           <div style={{ ...styles.tipChip, background: "#ffe5d5", color: "#b85d2f" }}>살구 = 클릭</div>
+        </div>
+
+        <div style={styles.variantRow}>
+          <div style={{ ...styles.variantChip, background: "#fff6bf", color: "#9a6800" }}>골든 = 보너스점수</div>
+          <div style={{ ...styles.variantChip, background: "#eef8ff", color: "#2d6ea6" }}>버블 = 연쇄효과</div>
+          <div style={{ ...styles.variantChip, background: "#ffe9e9", color: "#b73e3e" }}>폭주 = 빨리 처리</div>
+          <div style={{ ...styles.variantChip, background: "#f1ebff", color: "#6c49c6" }}>함정 = 정확하게</div>
         </div>
 
         {isGuideOpen && (
@@ -508,6 +863,7 @@ useEffect(() => {
                 <span style={{ ...styles.guideDot, background: "#e7a27b" }} />
                 살구는 1번만 클릭하면 제거
               </div>
+              <div style={styles.guideLineMuted}>골든/버블/폭주/함정 포인트가 랜덤으로 등장해요</div>
               <button type="button" style={styles.guideButton} onClick={() => setIsGuideOpen(false)}>
                 바로 시작
               </button>
@@ -517,7 +873,10 @@ useEffect(() => {
 
         <div
           ref={faceStageRef}
-          style={styles.faceFrame}
+          style={{
+            ...styles.faceFrame,
+            ...(isFever ? styles.faceFrameFever : {}),
+          }}
           onMouseDown={handleFacePointerDown}
           onMouseMove={handleFacePointerMove}
           onMouseUp={handleFacePointerUp}
@@ -528,16 +887,34 @@ useEffect(() => {
         >
           <img src={faceSrc} alt="game face" style={styles.faceImage} draggable={false} />
 
+          {isFever && <div style={styles.feverBadge}>FEVER TIME</div>}
+          {combo >= 2 && <div style={styles.comboBadge}>COMBO x{combo}</div>}
+          {bestCombo >= 3 && <div style={styles.bestComboBadge}>BEST x{bestCombo}</div>}
+
           {spots.map((spot) => {
             const view = getSpotView(spot);
+            const variantLabel =
+              spot.variant === "golden"
+                ? "G"
+                : spot.variant === "bubble"
+                ? "B"
+                : spot.variant === "rage"
+                ? "!"
+                : spot.variant === "trap"
+                ? "?"
+                : "";
 
             return (
               <button
-                key={spot.id}
+                key={spot.spawnKey}
                 type="button"
                 onClick={() => handleSpotPress(spot.id)}
                 style={{
                   ...styles.spot,
+                  ...(spot.variant === "golden" ? styles.spotGold : {}),
+                  ...(spot.variant === "bubble" ? styles.spotBubble : {}),
+                  ...(spot.variant === "rage" ? styles.spotRage : {}),
+                  ...(spot.variant === "trap" ? styles.spotTrap : {}),
                   width: `${view.hitSize}px`,
                   height: `${view.hitSize}px`,
                   left: `${spot.x}%`,
@@ -557,6 +934,7 @@ useEffect(() => {
                     display: "block",
                   }}
                 />
+                {variantLabel ? <span style={styles.variantMark}>{variantLabel}</span> : null}
               </button>
             );
           })}
@@ -570,6 +948,24 @@ useEffect(() => {
                 top: `${point.y}%`,
               }}
             />
+          ))}
+
+          {floatingTexts.map((item) => (
+            <span
+              key={item.id}
+              style={{
+                ...styles.floatText,
+                ...(item.kind === "combo"
+                  ? styles.floatTextCombo
+                  : item.kind === "gold"
+                  ? styles.floatTextGold
+                  : {}),
+                left: `${item.x}%`,
+                top: `${item.y}%`,
+              }}
+            >
+              {item.text}
+            </span>
           ))}
         </div>
 
@@ -633,12 +1029,48 @@ const styles = {
     fontWeight: 900,
     wordBreak: "keep-all",
   },
+  subtitle: {
+    marginTop: "4px",
+    color: "#64748b",
+    fontSize: "12px",
+    fontWeight: 800,
+    wordBreak: "keep-all",
+  },
+  scoreTimerWrap: {
+    display: "grid",
+    gap: "6px",
+  },
+  scoreBox: {
+    minWidth: "102px",
+    borderRadius: "18px",
+    background: "linear-gradient(180deg, #fff4da 0%, #ffe6a9 100%)",
+    padding: "7px 10px",
+    textAlign: "center",
+    border: "1px solid rgba(250,196,73,0.45)",
+  },
+  scoreLabel: {
+    fontSize: "10px",
+    fontWeight: 900,
+    color: "#8a5a00",
+    letterSpacing: "0.14em",
+  },
+  scoreValue: {
+    fontSize: "28px",
+    lineHeight: 1,
+    marginTop: "2px",
+    fontWeight: 900,
+    color: "#5d3f00",
+  },
   timerBox: {
-    minWidth: "96px",
+    minWidth: "102px",
     borderRadius: "20px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
     padding: "8px 10px",
     textAlign: "center",
+  },
+  timerBoxFever: {
+    background: "linear-gradient(180deg, #772bff 0%, #ff4eb8 100%)",
+    boxShadow: "0 8px 20px rgba(167, 71, 255, 0.32)",
   },
   timerLabel: {
     fontSize: "10px",
@@ -666,9 +1098,22 @@ const styles = {
     textAlign: "center",
     whiteSpace: "nowrap",
   },
+  variantRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "6px",
+  },
+  variantChip: {
+    padding: "6px 8px",
+    borderRadius: "12px",
+    fontWeight: 900,
+    fontSize: "11px",
+    textAlign: "center",
+    whiteSpace: "nowrap",
+  },
   guideOverlay: {
     position: "absolute",
-    inset: "82px 10px auto 10px",
+    inset: "104px 10px auto 10px",
     zIndex: 10,
   },
   guideCard: {
@@ -702,6 +1147,16 @@ const styles = {
     textAlign: "center",
     whiteSpace: "nowrap",
   },
+  guideLineMuted: {
+    minHeight: "34px",
+    borderRadius: "12px",
+    display: "grid",
+    placeItems: "center",
+    color: "#64748b",
+    fontWeight: 800,
+    fontSize: "12px",
+    background: "#f8fafc",
+  },
   guideDot: {
     width: "11px",
     height: "11px",
@@ -728,6 +1183,9 @@ const styles = {
     touchAction: "none",
     userSelect: "none",
   },
+  faceFrameFever: {
+    boxShadow: "inset 0 0 0 3px rgba(201, 70, 255, 0.35)",
+  },
   faceImage: {
     width: "100%",
     height: "100%",
@@ -745,6 +1203,68 @@ const styles = {
     transition: "transform 0.18s ease, opacity 0.2s ease",
     cursor: "pointer",
   },
+  spotGold: {
+    filter: "drop-shadow(0 0 8px rgba(255, 217, 79, 0.65))",
+  },
+  spotBubble: {
+    filter: "drop-shadow(0 0 7px rgba(255,255,255,0.75))",
+  },
+  spotRage: {
+    filter: "drop-shadow(0 0 8px rgba(255, 102, 102, 0.45))",
+  },
+  spotTrap: {
+    filter: "drop-shadow(0 0 8px rgba(126, 87, 255, 0.42))",
+  },
+  variantMark: {
+    position: "absolute",
+    top: "-4px",
+    right: "-2px",
+    minWidth: "14px",
+    height: "14px",
+    borderRadius: "999px",
+    background: "rgba(15,23,42,0.92)",
+    color: "#ffffff",
+    fontSize: "9px",
+    lineHeight: "14px",
+    fontWeight: 900,
+    textAlign: "center",
+  },
+  feverBadge: {
+    position: "absolute",
+    top: "10px",
+    left: "10px",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    background: "rgba(124, 58, 237, 0.92)",
+    color: "#ffffff",
+    fontWeight: 900,
+    fontSize: "12px",
+    zIndex: 3,
+  },
+  comboBadge: {
+    position: "absolute",
+    top: "10px",
+    right: "10px",
+    borderRadius: "999px",
+    padding: "6px 10px",
+    background: "rgba(15,23,42,0.9)",
+    color: "#fef08a",
+    fontWeight: 900,
+    fontSize: "12px",
+    zIndex: 3,
+  },
+  bestComboBadge: {
+    position: "absolute",
+    bottom: "10px",
+    right: "10px",
+    borderRadius: "999px",
+    padding: "5px 9px",
+    background: "rgba(255,255,255,0.9)",
+    color: "#7c3aed",
+    fontWeight: 900,
+    fontSize: "11px",
+    zIndex: 3,
+  },
   foam: {
     position: "absolute",
     width: "15px",
@@ -754,6 +1274,23 @@ const styles = {
     background: "rgba(255,255,255,0.9)",
     boxShadow: "0 0 0 2px rgba(255,255,255,0.5), 0 6px 12px rgba(255,255,255,0.45)",
     pointerEvents: "none",
+  },
+  floatText: {
+    position: "absolute",
+    transform: "translate(-50%, -50%)",
+    fontWeight: 900,
+    fontSize: "13px",
+    color: "#0f172a",
+    textShadow: "0 1px 6px rgba(255,255,255,0.85)",
+    pointerEvents: "none",
+  },
+  floatTextCombo: {
+    color: "#7c3aed",
+    fontSize: "14px",
+  },
+  floatTextGold: {
+    color: "#a16207",
+    fontSize: "14px",
   },
   smallStatus: {
     color: "#334155",
