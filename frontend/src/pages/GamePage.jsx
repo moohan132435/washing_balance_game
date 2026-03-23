@@ -110,21 +110,21 @@ function buildSpots() {
 }
 
 function getResultType(score) {
-  if (score >= 140) return "세안 밸런스 마스터";
-  if (score >= 95) return "안정적인 케어형";
-  if (score >= 65) return "조금만 더 익숙해지면";
+  if (score >= 130) return "세안 밸런스 마스터";
+  if (score >= 100) return "안정적인 케어형";
+  if (score >= 75) return "조금만 더 익숙해지면";
   return "순서부터 익히는 중";
 }
 
 function getResultMessage(score) {
-  if (score >= 140) return "단계를 거의 놓치지 않고 아주 깔끔하게 마무리했어요.";
-  if (score >= 95) return "큰 실수 없이 안정적으로 순서를 잘 맞췄어요.";
-  if (score >= 65) return "조금만 더 익숙해지면 점수가 더 올라가요.";
-  return "색과 순서를 한 번 더 보면 점수가 더 올라가요.";
+  if (score >= 130) return "단계를 거의 놓치지 않고 아주 깔끔하게 마무리했어요.";
+  if (score >= 100) return "실수가 조금 있어도 전체 흐름을 안정적으로 잘 맞췄어요.";
+  if (score >= 75) return "조금만 더 익숙해지면 100점은 충분히 넘길 수 있어요.";
+  return "색과 순서를 한 번 더 익히면 점수가 빠르게 올라갈 거예요.";
 }
 
 function computeScore(spots, timeLeft) {
-  let score = 22;
+  let score = 60;
   let wrong = 0;
   let resolved = 0;
 
@@ -135,25 +135,29 @@ function computeScore(spots, timeLeft) {
       resolved += 1;
 
       if (spot.type === "stage1") {
-        score += 18;
+        score += 20;
       } else if (spot.type === "stage2") {
-        score += 22;
-      } else {
         score += 26;
+      } else {
+        score += 32;
       }
       return;
     }
 
     if (spot.type === "stage2" && spot.currentStage === "stage3") {
-      score += 8;
+      score += 10;
       return;
     }
 
-    score -= 8;
+    score -= 4;
   });
 
-  score -= wrong * 8;
-  score += Math.max(0, Math.min(4, timeLeft));
+  if (resolved >= 4) {
+    score += 8;
+  }
+
+  score -= wrong * 3;
+  score += Math.max(0, timeLeft) * 2;
   score = Math.max(0, Math.round(score));
 
   return { score, wrong, resolved };
@@ -390,10 +394,10 @@ useEffect(() => {
         const distance = Math.hypot(position.x - spot.x, position.y - spot.y);
         const lastRubAt = lastRubAtRef.current.get(spot.id) || 0;
 
-        if (distance > 6 || Date.now() - lastRubAt < 120) return spot;
+        if (distance > 7.5 || Date.now() - lastRubAt < 80) return spot;
         lastRubAtRef.current.set(spot.id, Date.now());
 
-        setStatusMessage("분홍 포인트 정리 완료");
+        setStatusMessage("좋아요! 분홍 포인트를 깔끔하게 정리했어요");
         triggerFadeOut(spot.id);
 
         return {
@@ -439,7 +443,7 @@ useEffect(() => {
         }
 
         if (spot.currentStage === "stage2") {
-          setStatusMessage("좋아요. 이제 살구를 1번만 누르세요");
+          setStatusMessage("좋아요. 마지막으로 살구를 1번만 누르세요");
           return {
             ...spot,
             currentStage: "stage3",
