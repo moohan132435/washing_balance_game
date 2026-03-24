@@ -3,8 +3,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const WADIZ_URL =
-  import.meta.env.VITE_WADIZ_URL || "https://www.wadiz.kr/web/wcomingsoon/rwd/396453";
-const INSTAGRAM_DM_URL = import.meta.env.VITE_INSTAGRAM_DM_URL || "https://ig.me/m/pgb_kr";
+  import.meta.env.VITE_WADIZ_URL ||
+  "https://www.wadiz.kr/web/wcomingsoon/rwd/396453";
+const INSTAGRAM_DM_URL =
+  import.meta.env.VITE_INSTAGRAM_DM_URL || "https://ig.me/m/pgb_kr";
+
 const RAW_BASE_CANDIDATES = [
   import.meta.env.VITE_API_BASE_URL,
   import.meta.env.VITE_BACKEND_URL,
@@ -46,7 +49,9 @@ function compareRank(a, b) {
 }
 
 function buildCandidates(path) {
-  const candidates = RAW_BASE_CANDIDATES.map((base) => (base ? `${base}${path}` : path));
+  const candidates = RAW_BASE_CANDIDATES.map((base) =>
+    base ? `${base}${path}` : path
+  );
   return [...new Set(candidates)];
 }
 
@@ -97,6 +102,7 @@ async function trackEvent(payload) {
 function ResultPage() {
   const location = useLocation();
   const navigate = useNavigate();
+
   const result = useMemo(() => {
     const latest = location.state || getStoredResult() || getFallbackResult();
     return {
@@ -109,12 +115,15 @@ function ResultPage() {
   const [footerMessage, setFooterMessage] = useState("결과를 저장하는 중이에요.");
   const [isSaving, setIsSaving] = useState(true);
   const [showEventPopup, setShowEventPopup] = useState(false);
-  const [showActionButtons, setShowActionButtons] = useState(false);
+  const [showButtons, setShowButtons] = useState(false);
+
   const didRunRef = useRef(false);
 
   const payload = useMemo(
     () => ({
-      nickname: String(result.nickname || localStorage.getItem("nickname") || "PLAYER")
+      nickname: String(
+        result.nickname || localStorage.getItem("nickname") || "PLAYER"
+      )
         .trim()
         .slice(0, 30),
       score: Number(result.score || 0),
@@ -132,13 +141,14 @@ function ResultPage() {
   }, [result]);
 
   useEffect(() => {
-    setShowActionButtons(false);
-    const timer = window.setTimeout(() => {
-      setShowActionButtons(true);
-    }, 1000);
+    setShowButtons(false);
 
-    return () => window.clearTimeout(timer);
-  }, [result]);
+    const timer = setTimeout(() => {
+      setShowButtons(true);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +157,7 @@ function ResultPage() {
 
     const run = async () => {
       setIsSaving(true);
+
       try {
         const saveResponse = await requestWithFallback("post", "/api/scores", {
           data: payload,
@@ -155,7 +166,9 @@ function ResultPage() {
 
         if (cancelled) return;
         const saveData = saveResponse?.data || {};
-        setFooterMessage(saveData.message || "최고 점수 기준으로 랭킹이 저장됐어요.");
+        setFooterMessage(
+          saveData.message || "최고 점수 기준으로 랭킹이 저장됐어요."
+        );
       } catch (error) {
         if (cancelled) return;
         console.error("score save failed", error);
@@ -168,14 +181,21 @@ function ResultPage() {
       }
 
       try {
-        const rankingResponse = await requestWithFallback("get", "/api/rankings?limit=5");
+        const rankingResponse = await requestWithFallback(
+          "get",
+          "/api/rankings?limit=5"
+        );
         if (cancelled) return;
-        const list = Array.isArray(rankingResponse?.data) ? rankingResponse.data : [];
+        const list = Array.isArray(rankingResponse?.data)
+          ? rankingResponse.data
+          : [];
         const sortedTop5 = [...list].sort(compareRank).slice(0, 5);
         setRankings(sortedTop5);
 
         const isTop5 = sortedTop5.some(
-          (item) => String(item.nickname || "").trim() === payload.nickname && Number(item.score || 0) === payload.score
+          (item) =>
+            String(item.nickname || "").trim() === payload.nickname &&
+            Number(item.score || 0) === payload.score
         );
 
         if (isTop5) {
@@ -189,13 +209,18 @@ function ResultPage() {
           error?.response?.data?.error ||
           error?.message ||
           "랭킹 조회에 실패했어요.";
-        setFooterMessage((prev) => (prev === "결과를 저장하는 중이에요." ? serverMessage : `${prev} / ${serverMessage}`));
+        setFooterMessage((prev) =>
+          prev === "결과를 저장하는 중이에요."
+            ? serverMessage
+            : `${prev} / ${serverMessage}`
+        );
       } finally {
         if (!cancelled) setIsSaving(false);
       }
     };
 
     run();
+
     return () => {
       cancelled = true;
     };
@@ -206,17 +231,26 @@ function ResultPage() {
       {showEventPopup && (
         <div style={styles.popupOverlay}>
           <div style={styles.popupCard}>
-            <button type="button" style={styles.popupCloseButton} onClick={() => setShowEventPopup(false)}>
+            <button
+              type="button"
+              style={styles.popupCloseButton}
+              onClick={() => setShowEventPopup(false)}
+            >
               X
             </button>
+
             <div style={styles.popupBadge}>스타벅스 이벤트!</div>
             <div style={styles.popupTitle}>TOP 5라면 지금 바로 참여해보세요</div>
+
             <div style={styles.popupSteps}>
               <div style={styles.popupStep}>1. 게임 결과 캡쳐</div>
               <div style={styles.popupStep}>2. 와디즈 알림신청 캡쳐</div>
               <div style={styles.popupStep}>3. 두 장을 PGB_KR로 DM 보내기</div>
             </div>
-            <div style={styles.popupHint}>확인 후 스타벅스 이벤트 참여 대상으로 안내드려요.</div>
+
+            <div style={styles.popupHint}>
+              확인 후 스타벅스 이벤트 참여 대상으로 안내드려요.
+            </div>
           </div>
         </div>
       )}
@@ -227,6 +261,7 @@ function ResultPage() {
             <div style={styles.eyebrow}>RESULT</div>
             <h1 style={styles.title}>게임 결과</h1>
           </div>
+
           <div style={styles.scoreBox}>
             <div style={styles.scoreLabel}>SCORE</div>
             <div style={styles.scoreValue}>{result.score}</div>
@@ -241,6 +276,7 @@ function ResultPage() {
 
         <div style={styles.rankCard}>
           <div style={styles.rankCardLabel}>TOP 5 랭킹</div>
+
           <div style={styles.rankList}>
             {rankings.length === 0 ? (
               <div style={styles.emptyText}>아직 저장된 랭킹이 없어요.</div>
@@ -248,10 +284,14 @@ function ResultPage() {
               rankings.map((item, index) => (
                 <div key={`${item.nickname}-${index}`} style={styles.rankRow}>
                   <div style={styles.rankNumber}>{index + 1}</div>
+
                   <div style={styles.rankNicknameWrap}>
                     <div style={styles.rankNickname}>{item.nickname}</div>
-                    <div style={styles.rankGrade}>{item.grade || item.resultType || "-"}</div>
+                    <div style={styles.rankGrade}>
+                      {item.grade || item.resultType || "-"}
+                    </div>
                   </div>
+
                   <div style={styles.rankScore}>{item.score}</div>
                 </div>
               ))
@@ -259,65 +299,74 @@ function ResultPage() {
           </div>
         </div>
 
-        <div style={styles.footerInfo}>{isSaving ? "결과를 저장하는 중이에요." : showActionButtons ? footerMessage : "결과 확인 중... 버튼은 잠시 후 나타나요."}</div>
+        <div style={styles.footerInfo}>
+          {isSaving ? "결과를 저장하는 중이에요." : footerMessage}
+        </div>
 
-        <div style={{ ...styles.buttonGroup, ...(showActionButtons ? styles.buttonGroupVisible : styles.buttonGroupHidden) }}>
-          <button
-            type="button"
-            style={styles.primaryButton}
-            onClick={() => {
-              trackEvent({
-                eventType: "wadiz_click",
-                eventTimestamp: new Date().toISOString(),
-                eventDate: formatEventDate(),
-                nickname: payload.nickname,
-                score: payload.score,
-                eventSource: "result_primary_button",
-                page: "ResultPage",
-                meta: { target: "wadiz" },
-              });
-              window.open(WADIZ_URL, "_blank", "noopener,noreferrer");
-            }}
-          >
-            {result.ctaText || "와디즈 보러가기"}
-          </button>
-
-          <button
-            type="button"
-            style={styles.eventButton}
-            onClick={() => {
-              trackEvent({
-                eventType: "instagram_dm_click",
-                eventTimestamp: new Date().toISOString(),
-                eventDate: formatEventDate(),
-                nickname: payload.nickname,
-                score: payload.score,
-                eventSource: "result_event_button",
-                page: "ResultPage",
-                meta: { target: "instagram_dm" },
-              });
-              window.open(INSTAGRAM_DM_URL, "_blank", "noopener,noreferrer");
-            }}
-          >
-            스타벅스 이벤트 참여
-          </button>
-
-          <div style={styles.secondaryGrid}>
-            <button type="button" style={styles.secondaryButton} onClick={() => navigate("/ranking", { state: result })}>
-              전체 랭킹 보기
-            </button>
+        {showButtons && (
+          <div style={styles.buttonGroup}>
             <button
               type="button"
-              style={styles.secondaryButton}
+              style={styles.primaryButton}
               onClick={() => {
-                window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-                navigate("/game");
+                trackEvent({
+                  eventType: "wadiz_click",
+                  eventTimestamp: new Date().toISOString(),
+                  eventDate: formatEventDate(),
+                  nickname: payload.nickname,
+                  score: payload.score,
+                  eventSource: "result_primary_button",
+                  page: "ResultPage",
+                  meta: { target: "wadiz" },
+                });
+                window.open(WADIZ_URL, "_blank", "noopener,noreferrer");
               }}
             >
-              다시하기
+              {result.ctaText || "와디즈 보러가기"}
             </button>
+
+            <button
+              type="button"
+              style={styles.eventButton}
+              onClick={() => {
+                trackEvent({
+                  eventType: "instagram_dm_click",
+                  eventTimestamp: new Date().toISOString(),
+                  eventDate: formatEventDate(),
+                  nickname: payload.nickname,
+                  score: payload.score,
+                  eventSource: "result_event_button",
+                  page: "ResultPage",
+                  meta: { target: "instagram_dm" },
+                });
+                window.open(INSTAGRAM_DM_URL, "_blank", "noopener,noreferrer");
+              }}
+            >
+              스타벅스 이벤트 참여
+            </button>
+
+            <div style={styles.secondaryGrid}>
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={() => navigate("/ranking", { state: result })}
+              >
+                전체 랭킹 보기
+              </button>
+
+              <button
+                type="button"
+                style={styles.secondaryButton}
+                onClick={() => {
+                  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                  navigate("/game");
+                }}
+              >
+                다시하기
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -560,6 +609,8 @@ const styles = {
   buttonGroup: {
     display: "grid",
     gap: "12px",
+    animation: "resultButtonsFadeIn 0.35s ease-out",
+    transformOrigin: "top center",
   },
   primaryButton: {
     width: "100%",
