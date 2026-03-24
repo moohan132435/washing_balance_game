@@ -227,7 +227,7 @@ function getSpotView(spot) {
 
   const base = {
     size: isGolden ? 12 : 10,
-    hitSize: isGolden || isBubble ? 30 : 28,
+    hitSize: isGolden || isBubble ? 38 : 36,
     opacity: fadedOpacity,
     scale: fadedScale,
   };
@@ -278,10 +278,21 @@ function getSpotView(spot) {
 function getPointerPosition(event, element) {
   if (!element) return null;
   const rect = element.getBoundingClientRect();
-  const point = "touches" in event && event.touches[0] ? event.touches[0] : event;
-  const x = ((point.clientX - rect.left) / rect.width) * 100;
-  const y = ((point.clientY - rect.top) / rect.height) * 100;
+  const touchPoint =
+    "touches" in event && event.touches[0]
+      ? event.touches[0]
+      : "changedTouches" in event && event.changedTouches[0]
+      ? event.changedTouches[0]
+      : event;
+  const x = ((touchPoint.clientX - rect.left) / rect.width) * 100;
+  const y = ((touchPoint.clientY - rect.top) / rect.height) * 100;
   return { x, y };
+}
+
+function preventGhostClick(event) {
+  if (typeof event?.preventDefault === "function") {
+    event.preventDefault();
+  }
 }
 
 function GamePage() {
@@ -683,7 +694,7 @@ function GamePage() {
         const distance = Math.hypot(position.x - spot.x, position.y - spot.y);
         const lastRubAt = lastRubAtRef.current.get(spot.id) || 0;
 
-        if (distance > 8.2 || nowMs() - lastRubAt < 70) return spot;
+        if (distance > 10.5 || nowMs() - lastRubAt < 45) return spot;
         lastRubAtRef.current.set(spot.id, nowMs());
 
         let status = "좋아요! 분홍 포인트를 깔끔하게 정리했어요";
@@ -721,12 +732,14 @@ function GamePage() {
 
   const handleFacePointerDown = (event) => {
     if (isGuideOpen) return;
+    preventGhostClick(event);
     setIsRubbing(true);
     applyStage1(getPointerPosition(event, faceStageRef.current));
   };
 
   const handleFacePointerMove = (event) => {
     if (isGuideOpen || !isRubbing) return;
+    preventGhostClick(event);
     applyStage1(getPointerPosition(event, faceStageRef.current));
   };
 
@@ -805,6 +818,11 @@ function GamePage() {
         return spot;
       })
     );
+  };
+
+  const handleSpotTouchStart = (event, spotId) => {
+    preventGhostClick(event);
+    handleSpotPress(spotId);
   };
 
   return (
@@ -909,6 +927,7 @@ function GamePage() {
                 key={spot.spawnKey}
                 type="button"
                 onClick={() => handleSpotPress(spot.id)}
+                onTouchStart={(event) => handleSpotTouchStart(event, spot.id)}
                 style={{
                   ...styles.spot,
                   ...(spot.variant === "golden" ? styles.spotGold : {}),
@@ -1202,6 +1221,8 @@ const styles = {
     placeItems: "center",
     transition: "transform 0.18s ease, opacity 0.2s ease",
     cursor: "pointer",
+    touchAction: "manipulation",
+    WebkitTapHighlightColor: "transparent",
   },
   spotGold: {
     filter: "drop-shadow(0 0 8px rgba(255, 217, 79, 0.65))",

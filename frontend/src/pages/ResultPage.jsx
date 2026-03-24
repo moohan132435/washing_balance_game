@@ -2,7 +2,8 @@ import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const WADIZ_URL = import.meta.env.VITE_WADIZ_URL || "https://www.wadiz.kr";
+const WADIZ_URL =
+  import.meta.env.VITE_WADIZ_URL || "https://www.wadiz.kr/web/wcomingsoon/rwd/396453";
 const INSTAGRAM_DM_URL = import.meta.env.VITE_INSTAGRAM_DM_URL || "https://ig.me/m/pgb_kr";
 const RAW_BASE_CANDIDATES = [
   import.meta.env.VITE_API_BASE_URL,
@@ -108,6 +109,7 @@ function ResultPage() {
   const [footerMessage, setFooterMessage] = useState("결과를 저장하는 중이에요.");
   const [isSaving, setIsSaving] = useState(true);
   const [showEventPopup, setShowEventPopup] = useState(false);
+  const [showActionButtons, setShowActionButtons] = useState(false);
   const didRunRef = useRef(false);
 
   const payload = useMemo(
@@ -127,6 +129,15 @@ function ResultPage() {
 
   useEffect(() => {
     localStorage.setItem("lastGameResult", JSON.stringify(result));
+  }, [result]);
+
+  useEffect(() => {
+    setShowActionButtons(false);
+    const timer = window.setTimeout(() => {
+      setShowActionButtons(true);
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
   }, [result]);
 
   useEffect(() => {
@@ -248,9 +259,9 @@ function ResultPage() {
           </div>
         </div>
 
-        <div style={styles.footerInfo}>{isSaving ? "결과를 저장하는 중이에요." : footerMessage}</div>
+        <div style={styles.footerInfo}>{isSaving ? "결과를 저장하는 중이에요." : showActionButtons ? footerMessage : "결과 확인 중... 버튼은 잠시 후 나타나요."}</div>
 
-        <div style={styles.buttonGroup}>
+        <div style={{ ...styles.buttonGroup, ...(showActionButtons ? styles.buttonGroupVisible : styles.buttonGroupHidden) }}>
           <button
             type="button"
             style={styles.primaryButton}
